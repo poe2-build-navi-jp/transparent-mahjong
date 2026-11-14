@@ -41,5 +41,5 @@ VITE_PEER_HOST=peer.example.com VITE_PEER_PORT=443 VITE_PEER_PATH=/ npm run buil
 
 ## デプロイ
 
-`main` ブランチへ push すると GitHub Actions（`.github/workflows/deploy.yml`）でテスト・ビルドし、GitHub Pages に公開します。
+既定ブランチ（`gemunao` または `main`）へ push すると GitHub Actions（`.github/workflows/deploy.yml`）でテスト・ビルドし、GitHub Pages に公開します。
 リポジトリの Settings → Pages → Source を「GitHub Actions」にしてください。

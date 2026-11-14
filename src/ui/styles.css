@@ -173,11 +173,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tile.hl { outline: 2px solid var(--gold); outline-offset: 1px; }
 
 /* ======================================================== ステージ */
-.stage-wrap { position: fixed; inset: 0; overflow: hidden; background: #04100f; }
+.stage-wrap { position: fixed; inset: 0; overflow: hidden; overflow: clip; background: #04100f; }
 .stage {
   position: absolute; left: 50%; top: 50%;
   width: 1280px; height: 720px; transform-origin: 50% 50%;
-  overflow: hidden;
+  overflow: hidden; overflow: clip;
 }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; color: var(--muted); }
 .felt {
