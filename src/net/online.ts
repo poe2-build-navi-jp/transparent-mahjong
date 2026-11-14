@@ -1,6 +1,7 @@
 import Peer, { type DataConnection } from 'peerjs';
 import type { Action, GameView } from '../engine/game';
 import { GameHost } from './host';
+import { sanitizeName } from './names';
 
 /**
  * オンライン対戦（P2P / WebRTC）。
@@ -37,7 +38,7 @@ export function normalizeCode(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-function myToken(): string {
+export function myToken(): string {
   try {
     let t = localStorage.getItem('tmj-token');
     if (!t) {
@@ -53,6 +54,7 @@ function myToken(): string {
 export interface Member {
   name: string;
   host: boolean;
+  online?: boolean;
 }
 
 type ClientMsg = { t: 'hello'; name: string; token: string } | { t: 'act'; a: Action };
@@ -131,7 +133,7 @@ export class RoomHost {
     conn.on('data', (raw) => {
       const msg = raw as ClientMsg;
       if (msg.t === 'hello') {
-        const name = String(msg.name || 'ゲスト').slice(0, 12);
+        const name = sanitizeName(msg.name, 'ゲスト');
         const existing = this.guests.find((g) => g.token === msg.token);
         if (existing) {
           existing.conn = conn;

@@ -1,8 +1,12 @@
+import './ui/fonts.css';
 import './ui/styles.css';
 import type { GameView } from './engine/game';
 import { GameHost } from './net/host';
+import { sanitizeName } from './net/names';
 import { normalizeCode, RoomClient, RoomHost, type Member } from './net/online';
+import { createRoomCode, useServer, WsRoom } from './net/wsroom';
 import { audio } from './ui/audio';
+import { haptics } from './ui/haptics';
 import { TableUI, tileHtml } from './ui/table';
 
 const app = document.getElementById('app')!;
@@ -41,7 +45,7 @@ function setScreen(html: string) {
 
 function playerName(): string {
   const input = document.getElementById('name') as HTMLInputElement | null;
-  const n = (input?.value ?? store.name).trim().slice(0, 12) || 'あなた';
+  const n = sanitizeName(input?.value ?? store.name, 'あなた');
   store.name = n;
   return n;
 }
@@ -51,7 +55,7 @@ function decoTiles(): string {
   return ids.map((id, i) => `<div class="deco d${i}">${tileHtml(id, { size: 'hand' })}</div>`).join('');
 }
 
-const CREDIT = '<div class="credit">音声素材：<a href="https://amitaro.net/" target="_blank" rel="noopener">あみたろの声素材工房（https://amitaro.net/）</a><br>BGM・効果音・牌デザイン：オリジナル</div>';
+const CREDIT = '<div class="credit">音声素材：<a href="https://amitaro.net/" target="_blank" rel="noopener">あみたろの声素材工房（https://amitaro.net/）</a><br>BGM・効果音・牌デザイン：オリジナル<br><a class="plink" href="privacy.html">プライバシーポリシー</a></div>';
 
 function optionsHtml(): string {
   const len = store.length;
@@ -77,6 +81,10 @@ function bindOptions(onChange: () => void = () => {}) {
     app.querySelectorAll('[data-count]').forEach((x) => x.classList.toggle('on', x === b));
     onChange();
   }));
+  app.querySelectorAll<HTMLButtonElement>('[data-vibe]').forEach((b) => b.addEventListener('click', () => {
+    b.classList.toggle('on', haptics.toggle());
+    haptics.tap('medium');
+  }));
   app.querySelectorAll<HTMLButtonElement>('[data-audio]').forEach((b) => b.addEventListener('click', () => {
     b.classList.toggle('on', audio.toggle(b.dataset.audio as 'bgm' | 'voice'));
   }));
@@ -93,6 +101,7 @@ function titleScreen(error = '') {
     <div class="card">
       <label class="field"><span>プレイヤー名</span><input id="name" maxlength="12" value="${esc(store.name)}" placeholder="あなた"></label>
 ${optionsHtml()}
+      ${useServer && activeRoom.get() ? `<button class="big primary" id="resume">対局に復帰（ルーム ${esc(activeRoom.get()!)}）</button>` : ''}
       <button class="big primary" id="cpu">CPU対戦</button>
       <div class="row2">
         <button class="big" id="create">ルームを作る</button>
@@ -101,6 +110,7 @@ ${optionsHtml()}
       <div class="audio-row">
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
         <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button>
+        <button class="toggle ${haptics.enabled ? 'on' : ''}" data-vibe="1">振動</button>
       </div>
       <button class="link" id="rules">ルール説明</button>
       ${error ? `<div class="err">${esc(error)}</div>` : ''}
@@ -109,6 +119,7 @@ ${optionsHtml()}
   </div>`);
   audio.startBgm();
   bindOptions();
+  document.getElementById('resume')?.addEventListener('click', () => void serverRoom(playerName(), activeRoom.get()!));
   document.getElementById('cpu')!.addEventListener('click', () => startCpuGame(playerName()));
   document.getElementById('create')!.addEventListener('click', () => createRoom(playerName()));
   document.getElementById('join')!.addEventListener('click', () => joinScreen(playerName()));
@@ -145,13 +156,17 @@ function rulesScreen() {
       <ul>
         <li>「ルームを作る」で6文字のコードが発行されます。友達にコードを共有してください。</li>
         <li>「コードで参加」でコードを入力すると同じ卓に入れます。空いた席はCPUが入ります。</li>
+        <li>ルームを作った人が抜けても対局は続きます。アプリを閉じてしまっても、タイトル画面の「対局に復帰」から戻れます。</li>
+        <li>プレイヤー名は他の人に表示されます。不適切な語を含む名前は自動で置き換えられます。</li>
         <li>通信が切れた席はCPUが代打ちし、再接続すると復帰します。</li>
       </ul>
       <h3>クレジット</h3>
       <ul>
         <li>音声素材：<a href="https://amitaro.net/" target="_blank" rel="noopener" style="color:var(--gold)">あみたろの声素材工房（https://amitaro.net/）</a></li>
         <li>BGM・効果音・牌デザイン：オリジナル</li>
+        <li>フォント：M PLUS Rounded 1c / Noto Serif JP（SIL Open Font License）</li>
       </ul>
+      <p><a href="privacy.html" style="color:var(--gold)">プライバシーポリシー</a></p>
       <button class="big primary" id="back">戻る</button>
     </div>
   </div>`);
@@ -233,7 +248,80 @@ function flash(msg: string) {
   setTimeout(() => el.remove(), 1800);
 }
 
+// ---------------------------------------------------------------- オンライン（サーバー型）
+
+/** 参加中のルーム（アプリが終了されても戻れるよう保存） */
+const activeRoom = {
+  get(): string | null {
+    try {
+      const v = JSON.parse(localStorage.getItem('tmj-active-room') ?? 'null') as { code: string; at: number } | null;
+      return v && Date.now() - v.at < 3 * 60 * 60 * 1000 ? v.code : null;
+    } catch { return null; }
+  },
+  set(code: string | null) {
+    try {
+      if (code) localStorage.setItem('tmj-active-room', JSON.stringify({ code, at: Date.now() }));
+      else localStorage.removeItem('tmj-active-room');
+    } catch { /* noop */ }
+  },
+};
+
+async function serverRoom(name: string, joinCode: string | null) {
+  setScreen(`<div class="screen"><div class="card"><div class="waiting">${joinCode ? '接続中…' : 'ルームを作成中…'}</div></div></div>`);
+  let code: string;
+  try {
+    code = joinCode ?? await createRoomCode();
+  } catch (e) {
+    titleScreen(`ルームを作成できませんでした（${(e as Error).message}）`);
+    return;
+  }
+  const room = new WsRoom(name, code);
+  let table: TableUI | null = null;
+  const leave = () => { activeRoom.set(null); room.close(); titleScreen(); };
+  room.onLobby = (members, youAreHost) => {
+    if (table) return;
+    app.innerHTML = lobbyHtml(code, members, youAreHost);
+    bindLobby(code, leave, () => room.onLobby(members, youAreHost));
+    document.getElementById('start')?.addEventListener('click', () => {
+      if (members.length > store.count) {
+        document.getElementById('err')!.textContent = '三人麻雀は3人までです。四人麻雀に切り替えてください';
+        return;
+      }
+      room.start(store.length, store.count);
+    });
+  };
+  room.onView = (v) => {
+    if (!table) {
+      app.querySelector('.screen')?.remove();
+      table = new TableUI(app, (a) => room.act(a), leave, `ルーム ${code}`);
+    }
+    table.update(v);
+    activeRoom.set(v.phase === 'gameEnd' ? null : code);
+  };
+  room.onError = (m, fatal) => {
+    if (fatal) { activeRoom.set(null); room.close(); titleScreen(m); return; }
+    const el = document.getElementById('err');
+    if (el) el.textContent = m; else flash(m);
+  };
+  room.onConnection = (ok) => { if (!ok) flash('通信が切れました。再接続しています…'); };
+  room.onClosed = () => {
+    if (table?.view?.phase === 'gameEnd') return;
+    room.close();
+    titleScreen('サーバーとの接続が終了しました');
+  };
+  cleanup = () => { table?.destroy(); room.close(); };
+  try {
+    await room.connect();
+    activeRoom.set(code);
+  } catch (e) {
+    activeRoom.set(null);
+    room.close();
+    titleScreen((e as Error).message);
+  }
+}
+
 async function createRoom(name: string) {
+  if (useServer) { void serverRoom(name, null); return; }
   setScreen('<div class="screen"><div class="card"><div class="waiting">ルームを作成中…</div></div></div>');
   const room = new RoomHost(name);
   let code: string;
@@ -292,6 +380,7 @@ function joinScreen(name: string, preset = '') {
 }
 
 async function joinRoom(name: string, code: string) {
+  if (useServer) { void serverRoom(name, code); return; }
   setScreen('<div class="screen"><div class="card"><div class="waiting">接続中…</div></div></div>');
   const client = new RoomClient(name, code);
   let table: TableUI | null = null;
