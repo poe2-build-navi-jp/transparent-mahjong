@@ -36,13 +36,15 @@ interface Settings {
   autoWin: boolean;
   noCalls: boolean;
   autoDiscard: boolean;
+  /** 自動理牌（オフなら手牌は自分で並べ替える） */
+  autoSort: boolean;
 }
 
 function loadSettings(): Settings {
   try {
-    return { autoWin: false, noCalls: false, autoDiscard: false, ...JSON.parse(localStorage.getItem('tmj-settings') ?? '{}') };
+    return { autoWin: false, noCalls: false, autoDiscard: false, autoSort: false, ...JSON.parse(localStorage.getItem('tmj-settings') ?? '{}') };
   } catch {
-    return { autoWin: false, noCalls: false, autoDiscard: false };
+    return { autoWin: false, noCalls: false, autoDiscard: false, autoSort: false };
   }
 }
 
@@ -60,6 +62,14 @@ export class TableUI {
   private autoHandle: ReturnType<typeof setTimeout> | null = null;
   private hoverTile: TileId | null = null;
   private sentForVersion = '';
+  /** 自分で並べた手牌の順番（ツモ牌を手牌に入れた場合はそれも含む） */
+  private handOrder: TileId[] = [];
+  private drag: {
+    id: TileId; el: HTMLElement; startX: number; startY: number; moved: boolean;
+    ux: number; uy: number; scale: number; slots: { id: TileId; cx: number; cy: number }[];
+  } | null = null;
+  private suppressClick = false;
+  private renderPending = false;
 
   constructor(
     root: HTMLElement,
@@ -77,6 +87,10 @@ export class TableUI {
     window.addEventListener('resize', this.fit);
     this.stage.addEventListener('pointerdown', (e) => { this.pointerType = e.pointerType || 'mouse'; });
     this.stage.addEventListener('click', this.onClick);
+    this.stage.addEventListener('pointerdown', this.onDragStart);
+    window.addEventListener('pointermove', this.onDragMove);
+    window.addEventListener('pointerup', this.onDragEnd);
+    window.addEventListener('pointercancel', this.onDragEnd);
     this.stage.addEventListener('mouseover', this.onHover);
     this.timerHandle = setInterval(() => this.tickTimer(), 250);
     this.stage.innerHTML = '<div class="loading">配牌中…</div>';
@@ -85,6 +99,9 @@ export class TableUI {
 
   destroy() {
     window.removeEventListener('resize', this.fit);
+    window.removeEventListener('pointermove', this.onDragMove);
+    window.removeEventListener('pointerup', this.onDragEnd);
+    window.removeEventListener('pointercancel', this.onDragEnd);
     clearInterval(this.timerHandle);
     if (this.autoHandle) clearTimeout(this.autoHandle);
     this.wrap.remove();
@@ -110,7 +127,9 @@ export class TableUI {
       this.mode = 'normal';
       this.selected = null;
     }
-    this.render(prev);
+    // ドラッグ中は描き直すと掴んでいる牌が消えるので、離すまで待つ
+    if (this.drag) this.renderPending = true;
+    else this.render(prev);
     if (prev && v.players.some((p, i) => p.discards.length > (prev.players[i]?.discards.length ?? 0))) audio.click();
     if (v.event && v.event.seq !== this.lastEventSeq) {
       if (this.lastEventSeq !== 0 || prev) this.showCall(v);
@@ -284,7 +303,7 @@ export class TableUI {
     return `<div class="menu">
       <button class="exit" data-exit="1">退出</button>
       <div class="mlabel">${esc(this.label)}</div>
-      <div class="toggles">${t('autoWin', '自動和了')}${t('noCalls', '鳴きなし')}${t('autoDiscard', 'ツモ切り')}
+      <div class="toggles">${t('autoWin', '自動和了')}${t('noCalls', '鳴きなし')}${t('autoDiscard', 'ツモ切り')}${t('autoSort', '自動理牌')}
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
         <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button></div>
     </div>`;
@@ -339,9 +358,28 @@ export class TableUI {
       if (this.selected === t) cls.push('selected');
       return tileHtml(t, { size: 'hand', cls: cls.join(' '), attrs: `data-tile="${t}"` });
     };
-    const hand = (me.hand as TileId[]).map((t) => tile(t)).join('');
-    const drawn = me.drawn !== undefined && me.drawn !== null ? `<span class="gap"></span>${tile(me.drawn, 'drawn')}` : '';
-    return `<div class="myhand">${hand}${drawn}</div><div class="mymelds">${this.meldsHtml(me.melds, me.seat, 'meld', me.kita)}</div>`;
+    const { hand: order, drawn: drawnId } = this.displayHand(v);
+    const hand = order.map((t) => tile(t)).join('');
+    const drawn = drawnId !== null ? `<span class="gap"></span>${tile(drawnId, 'drawn')}` : '';
+    return `<div class="myhand ${this.settings.autoSort ? '' : 'free'}">${hand}${drawn}</div><div class="mymelds">${this.meldsHtml(me.melds, me.seat, 'meld', me.kita)}</div>`;
+  }
+
+  /** 表示する手牌の並びと、別置きにするツモ牌 */
+  private displayHand(v: GameView): { hand: TileId[]; drawn: TileId | null } {
+    const me = v.players[v.you];
+    const hand = me.hand as TileId[];
+    const drawn = me.drawn !== undefined && me.drawn !== null ? me.drawn : null;
+    if (this.settings.autoSort) {
+      this.handOrder = [];
+      return { hand: [...hand].sort((a, b) => a - b), drawn };
+    }
+    // 自分の並びを保ったまま、なくなった牌を除き、新しく入った牌は右端に足す
+    const present = new Set<TileId>(hand);
+    if (drawn !== null && this.handOrder.includes(drawn)) present.add(drawn);
+    const order = this.handOrder.filter((t) => present.has(t));
+    for (const t of hand) if (!order.includes(t)) order.push(t);
+    this.handOrder = order;
+    return { hand: order, drawn: drawn !== null && !order.includes(drawn) ? drawn : null };
   }
 
   private actionsHtml(v: GameView): string {
@@ -485,7 +523,69 @@ export class TableUI {
     if (info) info.outerHTML = this.infoHtml(v).replace('<div class="timer"></div>', '');
   };
 
+  // ------------------------------------------------------------ 手牌の並べ替え（ドラッグ）
+
+  private onDragStart = (e: PointerEvent) => {
+    if (this.settings.autoSort || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const el = (e.target as HTMLElement).closest('.myhand [data-tile]') as HTMLElement | null;
+    if (!el) return;
+    const tiles = [...this.stage.querySelectorAll<HTMLElement>('.myhand [data-tile]')];
+    if (tiles.length < 2) return;
+    // 画面の拡大縮小・縦持ち回転に関係なく扱えるよう、手牌の並ぶ向きと縮尺を実測する
+    const c = (t: HTMLElement) => { const r = t.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const a = c(tiles[0]);
+    const b = c(tiles[1]);
+    const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const local = tiles[1].offsetLeft - tiles[0].offsetLeft || 1;
+    this.drag = {
+      id: Number(el.dataset.tile), el, startX: e.clientX, startY: e.clientY, moved: false,
+      ux: (b.x - a.x) / dist, uy: (b.y - a.y) / dist, scale: dist / local,
+      slots: tiles.map((t) => ({ id: Number(t.dataset.tile), cx: c(t).x, cy: c(t).y })),
+    };
+  };
+
+  private onDragMove = (e: PointerEvent) => {
+    const d = this.drag;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (!d.moved) {
+      if (Math.hypot(dx, dy) < 10) return;
+      d.moved = true;
+      d.el.classList.add('dragging');
+    }
+    e.preventDefault();
+    // 手牌の並ぶ向きに沿った移動量（ステージ座標）
+    const along = (dx * d.ux + dy * d.uy) / d.scale;
+    const across = (-dx * d.uy + dy * d.ux) / d.scale;
+    d.el.style.transform = `translate(${along}px, ${Math.min(0, across)}px)`;
+  };
+
+  private onDragEnd = (e: PointerEvent) => {
+    const d = this.drag;
+    if (!d) return;
+    this.drag = null;
+    if (!d.moved) {
+      if (this.renderPending && this.view) { this.renderPending = false; this.render(this.view); }
+      return;
+    }
+    this.suppressClick = true;
+    setTimeout(() => { this.suppressClick = false; }, 0);
+    // 指を離した位置に最も近い隙間へ入れる
+    const along = (p: { cx: number; cy: number }) => p.cx * d.ux + p.cy * d.uy;
+    const pos = e.clientX * d.ux + e.clientY * d.uy;
+    const others = d.slots.filter((s) => s.id !== d.id);
+    let idx = others.findIndex((s) => pos < along(s));
+    if (idx < 0) idx = others.length;
+    const order = others.map((s) => s.id);
+    order.splice(idx, 0, d.id);
+    this.handOrder = order;
+    this.renderPending = false;
+    if (this.view) this.render(this.view);
+  };
+
   private onClick = (e: MouseEvent) => {
+    if (this.suppressClick) { this.suppressClick = false; return; }
     const target = e.target as HTMLElement;
     const v = this.view;
     if (target.closest('[data-exit]')) {
@@ -503,6 +603,7 @@ export class TableUI {
       this.settings[key] = !this.settings[key];
       try { localStorage.setItem('tmj-settings', JSON.stringify(this.settings)); } catch { /* 保存不可 */ }
       tg.classList.toggle('on', this.settings[key]);
+      if (key === 'autoSort') this.render(v);
       this.scheduleAuto();
       return;
     }
