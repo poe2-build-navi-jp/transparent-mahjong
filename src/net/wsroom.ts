@@ -5,10 +5,28 @@ import { myToken, type Member } from './online';
  * サーバー型のオンライン対戦（WebSocket）。
  * ゲームの進行はサーバー（Cloudflare Workers / Durable Objects）が行うので、
  * ルームを作った人がアプリを閉じても対局は続く。
- * VITE_SERVER_URL が設定されているときに使う（未設定なら従来の P2P 方式）。
+ * 使うサーバーは次の順で決める:
+ *   1. ページと同じ場所にサーバーがあればそれ（Cloudflare で画面とサーバーを一緒に公開した場合）
+ *   2. ビルド時の VITE_SERVER_URL（GitHub Pages やアプリから別の場所のサーバーへつなぐ場合）
+ *   3. どちらもなければ従来の P2P 方式
  */
-export const SERVER_URL: string = (import.meta.env.VITE_SERVER_URL || '').replace(/\/$/, '');
-export const useServer = SERVER_URL !== '';
+let SERVER_URL: string = (import.meta.env.VITE_SERVER_URL || '').replace(/\/$/, '');
+export let useServer = SERVER_URL !== '';
+
+/** 起動時に一度だけ呼ぶ。同じ場所にサーバーがあるか確かめる */
+export async function detectServer(): Promise<void> {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch(`${location.origin}/api/health`, { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (res.ok && (await res.json() as { ok?: boolean }).ok) {
+      SERVER_URL = location.origin;
+      useServer = true;
+    }
+  } catch { /* 同じ場所にサーバーはない */ }
+}
 
 type ServerMsg =
   | { t: 'lobby'; code: string; members: Member[]; youAreHost: boolean }

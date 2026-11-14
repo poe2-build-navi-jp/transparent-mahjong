@@ -4,7 +4,7 @@ import type { GameView } from './engine/game';
 import { GameHost } from './net/host';
 import { sanitizeName } from './net/names';
 import { normalizeCode, RoomClient, RoomHost, type Member } from './net/online';
-import { createRoomCode, useServer, WsRoom } from './net/wsroom';
+import { createRoomCode, detectServer, useServer, WsRoom } from './net/wsroom';
 import { audio } from './ui/audio';
 import { haptics } from './ui/haptics';
 import { TableUI, tileHtml } from './ui/table';
@@ -418,12 +418,14 @@ async function joinRoom(name: string, code: string) {
 
 const params = new URLSearchParams(location.search);
 const roomParam = params.get('room');
-if (roomParam) {
-  history.replaceState(null, '', location.pathname);
-  joinScreen(store.name, normalizeCode(roomParam));
-} else {
-  titleScreen();
-}
+void detectServer().then(() => {
+  if (roomParam) {
+    history.replaceState(null, '', location.pathname);
+    joinScreen(store.name, normalizeCode(roomParam));
+  } else {
+    titleScreen();
+  }
+});
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
