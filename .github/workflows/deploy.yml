@@ -27,9 +27,9 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          # 対戦サーバーの URL（リポジトリの Settings → Secrets and variables → Actions → Variables の SERVER_URL）
-          # 未設定ならオンライン対戦は P2P 方式で動く
-          VITE_SERVER_URL: ${{ vars.SERVER_URL }}
+          # 対戦サーバーの URL。リポジトリの Actions 変数 SERVER_URL があればそれを優先し、
+          # なければ Cloudflare に公開している対戦サーバーを使う
+          VITE_SERVER_URL: ${{ vars.SERVER_URL || 'https://transparent-mahjong-web.alones-aqua.workers.dev' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
