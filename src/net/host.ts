@@ -10,30 +10,78 @@ export interface HostOptions {
   /** 人間プレイヤーにルールの考慮時間・持ち時間を適用するか（オンライン用） */
   timed: boolean;
   cpuDelay?: number;
+  /**
+   * 時間で起きる処理（CPUの手番・時間切れ）の予約方法。
+   * 省略時は setTimeout。サーバーでは Durable Object のアラームに置き換えて、待ち時間中はサーバーを休止させる。
+   * at = null は「予約なし」。
+   */
+  schedule?: (at: number | null) => void;
 }
 
 /** 局の結果画面で待つ時間 */
 const TIME_READY = 20000;
 
+/** 時間で起きる処理 */
+interface Due {
+  at: number;
+  seat: number;
+  kind: 'cpu' | 'timeout';
+  /** 予約時のゲームの版。版が変わっていたら（誰かが先に動いたら）無効 */
+  version: number;
+}
+
+/** 保存・復元用 */
+export interface HostSnapshot {
+  game: Record<string, unknown>;
+  bank: number[];
+  decisionKey: string;
+  decisionStart: number;
+  due: Due[];
+  timed: boolean;
+}
+
 /**
  * 権威サーバー役。ゲーム状態を持ち、各席へ見せてよい情報だけを送る。
- * ローカル（CPU対戦）でもオンライン（サーバー・ホスト端末上）でも同じものを使う。
+ * ローカル（CPU対戦）でもオンライン（サーバー上）でも同じものを使う。
  *
  * 時間の管理: 1手ごとに「考慮時間」があり、それを超えた分は各自の「持ち時間」から減る。
  * 両方使い切ると自動でツモ切り（鳴きはスキップ）になる。
  */
 export class GameHost {
   game: Game;
-  private timers: ReturnType<typeof setTimeout>[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private decisionKey = '';
   private decisionStart = 0;
   /** 各席の残り持ち時間（ミリ秒） */
   private bank: number[];
+  private due: Due[] = [];
   private stopped = false;
+  /** false の間は時間で起きる処理を止める（全員が切断している間など） */
+  private running = true;
 
-  constructor(config: GameConfig, private links: SeatLink[], private opts: HostOptions) {
-    this.game = new Game(config);
-    this.bank = this.game.players.map(() => this.game.rules.bankSec * 1000);
+  constructor(config: GameConfig | null, private links: SeatLink[], private opts: HostOptions, snap?: HostSnapshot) {
+    if (snap) {
+      this.game = Game.fromJSON(snap.game);
+      this.bank = snap.bank;
+      this.decisionKey = snap.decisionKey;
+      this.decisionStart = snap.decisionStart;
+      this.due = snap.due;
+    } else {
+      this.game = new Game(config!);
+      this.bank = this.game.players.map(() => this.game.rules.bankSec * 1000);
+    }
+  }
+
+  /** 保存した状態から作り直す（サーバーの休止から復帰したとき） */
+  static restore(snap: HostSnapshot, links: SeatLink[], opts: HostOptions): GameHost {
+    return new GameHost(null, links, { ...opts, timed: snap.timed }, snap);
+  }
+
+  snapshot(): HostSnapshot {
+    return {
+      game: this.game.toJSON(), bank: this.bank, decisionKey: this.decisionKey,
+      decisionStart: this.decisionStart, due: this.due, timed: this.opts.timed,
+    };
   }
 
   private get timed(): boolean {
@@ -46,7 +94,21 @@ export class GameHost {
 
   stop() {
     this.stopped = true;
-    this.clearTimers();
+    this.disarm();
+    this.opts.schedule?.(null);
+  }
+
+  /** 時間で起きる処理の一時停止・再開 */
+  setRunning(on: boolean) {
+    if (this.running === on) return;
+    this.running = on;
+    if (on) {
+      // 止めていた間の分、考慮時間を数え直す
+      this.decisionKey = '';
+      this.update();
+    } else {
+      this.arm();
+    }
   }
 
   setLink(seat: number, link: SeatLink) {
@@ -62,6 +124,16 @@ export class GameHost {
     this.game.connected[seat] = false;
     this.game.setCpu(seat, true);
     this.update();
+  }
+
+  /** 席の送り先だけ差し替える（状態は変えない） */
+  relink(seat: number, link: SeatLink) {
+    this.links[seat] = link;
+  }
+
+  /** 全員に今の盤面を送り直す */
+  broadcast() {
+    for (let s = 0; s < this.game.n; s++) this.sendTo(s);
   }
 
   action(seat: number, a: Action) {
@@ -80,9 +152,41 @@ export class GameHost {
     }
   }
 
-  private clearTimers() {
-    for (const t of this.timers) clearTimeout(t);
-    this.timers = [];
+  /** 期限が来た処理を実行する（タイマー・アラームから呼ばれる） */
+  runDue(now = Date.now()) {
+    if (this.stopped || !this.running) return;
+    for (let guard = 0; guard < 100; guard++) {
+      const g = this.game;
+      const d = this.due.filter((x) => x.at <= now).sort((a, b) => a.at - b.at)[0];
+      if (!d) break;
+      this.due = this.due.filter((x) => x !== d);
+      if (d.version !== g.version) continue;
+      if (d.kind === 'cpu') {
+        const o = g.optionsFor(d.seat);
+        if (o && g.players[d.seat].isCpu) this.action(d.seat, chooseAction(g, d.seat, o));
+      } else {
+        if (g.phase !== 'roundEnd') this.bank[d.seat] = 0;
+        this.timeoutAction(d.seat);
+      }
+    }
+    this.arm();
+  }
+
+  private disarm() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  /** 次に起きる時刻を予約する */
+  private arm() {
+    this.disarm();
+    if (this.stopped) return;
+    const next = this.running && this.due.length ? Math.min(...this.due.map((d) => d.at)) : null;
+    if (this.opts.schedule) {
+      this.opts.schedule(next);
+      return;
+    }
+    if (next !== null) this.timer = setTimeout(() => this.runDue(), Math.max(0, next - Date.now()));
   }
 
   /** その席の締め切り時刻（なければ null） */
@@ -102,7 +206,6 @@ export class GameHost {
 
   private update() {
     if (this.stopped) return;
-    this.clearTimers();
     const g = this.game;
     const pending = g.pendingSeats();
 
@@ -114,30 +217,21 @@ export class GameHost {
       this.decisionStart = Date.now();
     }
     const version = g.version;
+    const now = Date.now();
+    this.due = [];
     for (const s of pending) {
       const dl = this.deadlineOf(s);
-      if (dl === null) continue;
-      this.timers.push(setTimeout(() => {
-        if (g.version !== version || this.stopped) return;
-        if (g.phase !== 'roundEnd') this.bank[s] = 0;
-        this.timeoutAction(s);
-      }, Math.max(0, dl - Date.now()) + 300));
+      if (dl !== null) this.due.push({ at: dl + 300, seat: s, kind: 'timeout', version });
     }
-    for (let s = 0; s < g.n; s++) this.sendTo(s);
-
     // CPU の行動（鳴き判断は即時寄り、打牌は少し間を置く）
     const delay = this.opts.cpuDelay ?? 650;
     for (const s of pending) {
       if (!g.players[s].isCpu) continue;
-      const wait = g.phase === 'turn' ? delay : 250;
-      this.timers.push(setTimeout(() => {
-        if (g.version !== version || this.stopped) return;
-        const o = g.optionsFor(s);
-        if (!o) return;
-        this.action(s, chooseAction(g, s, o));
-      }, wait));
+      this.due.push({ at: now + (g.phase === 'turn' ? delay : 250), seat: s, kind: 'cpu', version });
       if (g.phase === 'turn') break;
     }
+    for (let s = 0; s < g.n; s++) this.sendTo(s);
+    this.arm();
   }
 
   private timeoutAction(seat: number) {

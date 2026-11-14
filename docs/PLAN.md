@@ -80,7 +80,14 @@ Cloudflare Workers + Durable Objects の対戦サーバー（サーバー権威�
    - Apple Developer Program / Google Play Console 登録
 4. 配信
    - TestFlight / Google Play 内部テストでβ版 → 正式リリース
-5. 収益化（任意）: 広告（対局間インタースティシャル）またはスキン・キャラの買い切り
+5. 収益化（実装済みの部分あり）
+   - 無料: CPU対戦無制限、オンライン対戦は1日1回（サーバーで回数管理）、対局後に全画面広告（アプリ版）
+   - プレミアム会員 月額800円: オンライン対戦無制限・広告なし（RevenueCat の entitlement `premium`）
+   - 広告削除 買い切り: 広告なし（entitlement `no_ads`）
+   - アプリ化時の作業: RevenueCat / AdMob のアカウント作成、ストアで商品登録（月額サブスク・非消耗型）、
+     `@revenuecat/purchases-capacitor` と `@capacitor-community/admob` の組み込み、環境変数（`VITE_RC_IOS_KEY` など）の設定、
+     サーバーへ `REVENUECAT_API_KEY` を登録
+   - 将来: 牌デザイン・卓の色などの見た目の販売
 
 ### マイルストーン目安
 

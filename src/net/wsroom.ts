@@ -32,11 +32,32 @@ export async function detectServer(): Promise<void> {
 type ServerMsg =
   | { t: 'lobby'; code: string; members: Member[]; youAreHost: boolean; rules?: Rules }
   | { t: 'view'; v: GameView }
-  | { t: 'error'; msg: string; fatal?: boolean }
+  | { t: 'error'; msg: string; fatal?: boolean; code?: string }
   | { t: 'pong' };
+
+export interface QuotaStatus {
+  premium: boolean;
+  used: number;
+  /** 1日あたりの無料対局数（0 = 無制限） */
+  limit: number;
+  /** 本日の残り（null = 無制限） */
+  remaining: number | null;
+}
+
+/** 本日の無料オンライン対局の残り。サーバーがない・古い場合は null */
+export async function fetchQuota(): Promise<QuotaStatus | null> {
+  if (!useServer) return null;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/quota?token=${encodeURIComponent(myToken())}`, { cache: 'no-store' });
+    return res.ok ? (await res.json()) as QuotaStatus : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function createRoomCode(): Promise<string> {
   const res = await fetch(`${SERVER_URL}/api/rooms`, { method: 'POST' });
+  if (res.status === 429) throw new Error('ルームの作成が多すぎます。少し時間をおいてください');
   if (!res.ok) throw new Error(`サーバーに接続できませんでした（${res.status}）`);
   const { code } = (await res.json()) as { code: string };
   return code;
@@ -50,7 +71,7 @@ export class WsRoom {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   onLobby: (members: Member[], youAreHost: boolean, rules: Rules) => void = () => {};
   onView: (v: GameView) => void = () => {};
-  onError: (msg: string, fatal: boolean) => void = () => {};
+  onError: (msg: string, fatal: boolean, code?: string) => void = () => {};
   onClosed: () => void = () => {};
   onConnection: (connected: boolean) => void = () => {};
 
@@ -94,7 +115,7 @@ export class WsRoom {
       if (msg.t === 'error') {
         if (msg.fatal) this.closedByUser = true;
         if (msg.fatal && this.ready) { this.ready.reject(new Error(msg.msg)); this.ready = null; }
-        else this.onError(msg.msg, !!msg.fatal);
+        else this.onError(msg.msg, !!msg.fatal, msg.code);
         return;
       }
       if (msg.t === 'pong') return;

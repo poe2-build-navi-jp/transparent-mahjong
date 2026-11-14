@@ -4,8 +4,10 @@ import type { GameView } from './engine/game';
 import { GameHost } from './net/host';
 import { sanitizeName } from './net/names';
 import { normalizeCode, RoomClient, RoomHost, type Member } from './net/online';
-import { createRoomCode, detectServer, useServer, WsRoom } from './net/wsroom';
+import { createRoomCode, detectServer, fetchQuota, useServer, WsRoom } from './net/wsroom';
 import { DEFAULT_RULES, sanitizeRules, type Rules } from './engine/rules';
+import { ads } from './app/ads';
+import { billing } from './app/billing';
 import { audio } from './ui/audio';
 import { bindRulesPanel, rulesPanelHtml, rulesSummaryHtml } from './ui/rulesPanel';
 import { haptics } from './ui/haptics';
@@ -116,6 +118,7 @@ ${optionsHtml()}
         <button class="big" id="create">ルームを作る</button>
         <button class="big" id="join">コードで参加</button>
       </div>
+      <button class="quota-line" id="premium"><span id="quota">オンライン対戦の残り回数を確認中…</span><span class="pm">プレミアム</span></button>
       <div class="audio-row">
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
         <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button>
@@ -135,6 +138,86 @@ ${optionsHtml()}
   document.getElementById('join')!.addEventListener('click', () => joinScreen(playerName()));
   document.getElementById('rules')!.addEventListener('click', rulesScreen);
   document.getElementById('ruleset')!.addEventListener('click', ruleSettingsScreen);
+  document.getElementById('premium')!.addEventListener('click', () => premiumScreen());
+  void showQuota();
+}
+
+/** タイトル画面に本日の無料オンライン対局の残りを出す */
+async function showQuota() {
+  const el = document.getElementById('quota');
+  if (!el) return;
+  const q = await fetchQuota();
+  if (!document.body.contains(el)) return;
+  if (!q) { el.textContent = 'プレミアム会員について'; return; }
+  if (q.premium) el.textContent = 'プレミアム会員：オンライン対戦 無制限';
+  else if (q.remaining === null) el.textContent = 'オンライン対戦：無制限（現在は制限なし）';
+  else el.textContent = `本日の無料オンライン対局：あと${q.remaining}回（毎日0時に回復）`;
+}
+
+// ---------------------------------------------------------------- プレミアム
+
+async function premiumScreen(back: () => void = () => titleScreen()) {
+  const q = await fetchQuota();
+  const ent = billing.entitlements;
+  const premium = q?.premium || ent.premium;
+  const limit = q?.limit ?? 1;
+  setScreen(`
+  <div class="screen rules">
+    <div class="card wide premium">
+      <h2>プレミアム会員</h2>
+      <p>透明麻雀のオンライン対戦は、対局を進めるサーバーを運営者が費用を負担して動かしています。
+      遊ぶ人が増えるほどサーバー代がかかるため、<b>利用者の増加に合わせてサーバーを拡大していきます</b>。
+      その運営費として、プレミアム会員（月額800円）をご用意しました。</p>
+      <div class="plans">
+        <div class="plan">
+          <div class="pname2">無料</div>
+          <ul>
+            <li>CPU対戦：無制限</li>
+            <li>オンライン対戦：1日${limit || '無制限'}${limit ? '回まで' : ''}（日本時間0時に回復）</li>
+            <li>対局後に広告あり（アプリ版）</li>
+          </ul>
+        </div>
+        <div class="plan pro">
+          <div class="pname2">プレミアム <span id="price-premium">月額800円</span></div>
+          <ul>
+            <li>CPU対戦：無制限</li>
+            <li><b>オンライン対戦：無制限</b></li>
+            <li><b>広告なし</b></li>
+          </ul>
+        </div>
+      </div>
+      ${premium ? '<div class="pm-on">プレミアム会員です。いつもありがとうございます！</div>' : ''}
+      ${billing.available
+        ? `${premium ? '' : '<button class="big primary" id="buy-premium">プレミアムに登録する</button>'}
+           ${ent.noAds || premium ? '' : '<button class="big" id="buy-noads">広告だけ消す（買い切り）<span id="price-noads"></span></button>'}
+           <button class="link" id="restore">購入を復元する</button>`
+        : '<div class="waiting">ご購入はアプリ版から行えます（アプリ版は準備中です）。</div>'}
+      <p class="fine">サブスクリプションは、期間終了の24時間前までに解約しない限り自動で更新されます。
+      解約・更新の確認は App Store / Google Play のサブスクリプション設定から行えます。
+      料金はご利用のストアのアカウントに請求されます。</p>
+      <p class="fine"><a href="terms.html">利用規約</a> ・ <a href="privacy.html">プライバシーポリシー</a></p>
+      <div class="err" id="err"></div>
+      <button class="big" id="back">戻る</button>
+    </div>
+  </div>`);
+  document.getElementById('back')!.addEventListener('click', back);
+  const err = (e: unknown) => { const el = document.getElementById('err'); if (el) el.textContent = (e as Error).message; };
+  document.getElementById('buy-premium')?.addEventListener('click', async () => {
+    try { await billing.buy('premium'); flash('プレミアムに登録しました'); void premiumScreen(back); } catch (e) { err(e); }
+  });
+  document.getElementById('buy-noads')?.addEventListener('click', async () => {
+    try { await billing.buy('noAds'); flash('広告を削除しました'); void premiumScreen(back); } catch (e) { err(e); }
+  });
+  document.getElementById('restore')?.addEventListener('click', async () => {
+    try { await billing.restore(); flash('購入を復元しました'); void premiumScreen(back); } catch (e) { err(e); }
+  });
+  if (billing.available) {
+    const p = await billing.prices();
+    const pp = document.getElementById('price-premium');
+    if (pp && p.premium) pp.textContent = `月額${p.premium}`;
+    const pn = document.getElementById('price-noads');
+    if (pn && p.noAds) pn.textContent = `（${p.noAds}）`;
+  }
 }
 
 function ruleSettingsScreen() {
@@ -218,7 +301,7 @@ function startCpuGame(name: string) {
     { names, cpu: names.map((_, s) => s !== seat), length: store.length, rules: store.rules },
     links, { timed: false },
   );
-  table = new TableUI(app, (a) => host.action(seat, a), () => titleScreen(), count === 3 ? 'CPU対戦（三麻）' : 'CPU対戦');
+  table = new TableUI(app, (a) => host.action(seat, a), () => exitAfterGame(table.view?.phase === 'gameEnd'), count === 3 ? 'CPU対戦（三麻）' : 'CPU対戦');
   cleanup = () => { host.stop(); table.destroy(); };
   host.start();
 }
@@ -307,7 +390,7 @@ async function serverRoom(name: string, joinCode: string | null) {
   }
   const room = new WsRoom(name, code);
   let table: TableUI | null = null;
-  const leave = () => { activeRoom.set(null); room.close(); titleScreen(); };
+  const leave = () => { const fin = table?.view?.phase === 'gameEnd'; activeRoom.set(null); room.close(); exitAfterGame(!!fin); };
   let sentRules = false;
   room.onLobby = (members, youAreHost, rules) => {
     if (table) return;
@@ -332,10 +415,16 @@ async function serverRoom(name: string, joinCode: string | null) {
     table.update(v);
     activeRoom.set(v.phase === 'gameEnd' ? null : code);
   };
-  room.onError = (m, fatal) => {
+  room.onError = (m, fatal, errCode) => {
     if (fatal) { activeRoom.set(null); room.close(); titleScreen(m); return; }
     const el = document.getElementById('err');
-    if (el) el.textContent = m; else flash(m);
+    if (el) {
+      el.textContent = m;
+      if (errCode === 'quota') {
+        el.insertAdjacentHTML('beforeend', '<br><button class="link" id="to-premium">プレミアム会員について</button>');
+        document.getElementById('to-premium')?.addEventListener('click', () => { room.close(); activeRoom.set(null); void premiumScreen(); });
+      }
+    } else flash(m);
   };
   room.onConnection = (ok) => { if (!ok) flash('通信が切れました。再接続しています…'); };
   room.onClosed = () => {
@@ -453,6 +542,15 @@ async function joinRoom(name: string, code: string) {
 
 const params = new URLSearchParams(location.search);
 const roomParam = params.get('room');
+/** 対局を終えてタイトルへ戻る。終局後なら広告（アプリ版・無料会員のみ） */
+function exitAfterGame(finished: boolean) {
+  titleScreen();
+  if (finished) void ads.afterGame();
+}
+
+void billing.init();
+void ads.init();
+
 void detectServer().then(() => {
   if (roomParam) {
     history.replaceState(null, '', location.pathname);
