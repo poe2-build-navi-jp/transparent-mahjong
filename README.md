@@ -49,7 +49,7 @@ npm run build    # dist/ に静的ファイルを出力
 ### 対戦サーバー（推奨）
 
 `server/` に Cloudflare Workers 用の対戦サーバーがあります。サーバーがゲームを進行するので、ルームを作った人が抜けても対局が続き、アプリを閉じても「対局に復帰」で戻れます。
-セットアップ手順は [server/README.md](server/README.md) を参照してください。リポジトリの Actions 変数 `SERVER_URL` を設定するとWeb版がサーバー経由になり、未設定なら下の P2P 方式で動きます。
+現在は Cloudflare Workers で画面とサーバーを同じ URL で公開しています（リポジトリ直下の `wrangler.toml`）。セットアップ手順は [server/README.md](server/README.md) を参照してください。リポジトリの Actions 変数 `SERVER_URL` を設定するとWeb版がサーバー経由になり、未設定なら下の P2P 方式で動きます。
 
 ### シグナリングサーバーの変更（P2P 方式）
 
