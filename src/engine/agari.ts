@@ -91,9 +91,9 @@ function countDora(ctx: WinContext): { dora: number; ura: number } {
   for (const m of ctx.melds) for (const t of m.tiles) all.push(kindOf(t));
   const c = countsOf(all);
   let dora = 0;
-  for (const ind of ctx.doraIndicators) dora += c[doraFromIndicator(ind)];
+  for (const ind of ctx.doraIndicators) dora += c[doraFromIndicator(ind, ctx.sanma)];
   let ura = 0;
-  if (ctx.riichi) for (const ind of ctx.uraIndicators) ura += c[doraFromIndicator(ind)];
+  if (ctx.riichi) for (const ind of ctx.uraIndicators) ura += c[doraFromIndicator(ind, ctx.sanma)];
   return { dora, ura };
 }
 
@@ -249,6 +249,9 @@ export function evaluateWin(ctx: WinContext): WinResult | null {
       yaku = [...yaku];
       if (dora) yaku.push({ name: 'ドラ', han: dora });
       if (ura) yaku.push({ name: '裏ドラ', han: ura });
+      const nuki = ctx.nukiDora ?? 0;
+      if (nuki) yaku.push({ name: '抜きドラ', han: nuki });
+      doraTotal += nuki;
       han += doraTotal;
     }
     const lim = limitOf(han, cand.fu, cand.yakuman);

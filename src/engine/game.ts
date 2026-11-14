@@ -12,6 +12,7 @@ export type Action =
   | { type: 'tsumo' }
   | { type: 'ankan'; kind: Kind }
   | { type: 'kakan'; tile: TileId }
+  | { type: 'nuki'; tile: TileId }
   | { type: 'ron' }
   | { type: 'pon'; tiles: TileId[] }
   | { type: 'chi'; tiles: TileId[] }
@@ -25,6 +26,7 @@ export interface Options {
   tsumo?: boolean;
   ankan?: Kind[];
   kakan?: TileId[];
+  nuki?: TileId[];
   ron?: boolean;
   pon?: TileId[][];
   chi?: TileId[][];
@@ -55,6 +57,8 @@ export interface PlayerState {
   furitenRiichi: boolean;
   kuikae: Kind | null;
   discardCount: number;
+  /** 抜きドラ（三麻の北） */
+  kita: TileId[];
 }
 
 export interface WinInfo {
@@ -62,6 +66,7 @@ export interface WinInfo {
   from: number | null;
   hand: TileId[];
   melds: Meld[];
+  kita: TileId[];
   winTile: TileId;
   result: WinResult;
   points: number;
@@ -88,7 +93,7 @@ export type Phase = 'turn' | 'claims' | 'chankan' | 'roundEnd' | 'gameEnd';
 export interface GameEvent {
   seq: number;
   seat: number;
-  kind: 'pon' | 'chi' | 'kan' | 'riichi' | 'ron' | 'tsumo' | 'draw';
+  kind: 'pon' | 'chi' | 'kan' | 'riichi' | 'ron' | 'tsumo' | 'draw' | 'nuki';
 }
 
 export interface GameConfig {
@@ -113,6 +118,7 @@ export interface PlayerView {
   melds: Meld[];
   discards: DiscardInfo[];
   riichi: boolean;
+  kita: TileId[];
 }
 
 export interface GameView {
@@ -188,22 +194,25 @@ export class Game {
   readySeats = new Set<number>();
   event: GameEvent | null = null;
   eventSeq = 0;
-  connected = [true, true, true, true];
+  connected: boolean[] = [true, true, true, true];
   version = 0;
 
   constructor(config: GameConfig) {
     this.config = config;
-    const start = config.startScore ?? 25000;
+    const start = config.startScore ?? (config.names.length === 3 ? 35000 : 25000);
     this.players = config.names.map((name, i) => ({
       name, isCpu: config.cpu[i], hand: [], drawn: null, melds: [], discards: [], score: start,
       riichi: false, doubleRiichi: false, ippatsu: false, furitenTemp: false, furitenRiichi: false,
-      kuikae: null, discardCount: 0,
+      kuikae: null, discardCount: 0, kita: [],
     }));
     this.startRound();
   }
 
   get dealer() { return this.roundNum; }
-  seatWind(seat: number): Kind { return EAST + ((seat - this.dealer + 4) % 4); }
+  get n() { return this.players.length; }
+  get sanma() { return this.players.length === 3; }
+  seats(): number[] { return this.players.map((_, i) => i); }
+  seatWind(seat: number): Kind { return EAST + ((seat - this.dealer + this.n) % this.n); }
   get roundWindKind(): Kind { return EAST + this.roundWind; }
   doraIndicators(): TileId[] { return this.deadWall.slice(4, 4 + this.doraCount); }
   uraIndicators(): TileId[] { return this.deadWall.slice(9, 9 + this.doraCount); }
@@ -213,7 +222,9 @@ export class Game {
   }
 
   startRound() {
-    const tiles = shuffle(Array.from({ length: NUM_TILES }, (_, i) => i));
+    // 三麻は萬子の2〜8を使わない（108枚）
+    const tiles = shuffle(Array.from({ length: NUM_TILES }, (_, i) => i)
+      .filter((t) => !this.sanma || kindOf(t) === 0 || kindOf(t) >= 8));
     this.deadWall = tiles.slice(0, 14);
     this.wall = tiles.slice(14);
     for (const p of this.players) {
@@ -224,6 +235,7 @@ export class Game {
       p.riichi = p.doubleRiichi = p.ippatsu = p.furitenTemp = p.furitenRiichi = false;
       p.kuikae = null;
       p.discardCount = 0;
+      p.kita = [];
     }
     this.doraCount = 1;
     this.kanCount = 0;
@@ -301,6 +313,8 @@ export class Game {
       roundWind: this.roundWindKind,
       doraIndicators: this.doraIndicators().map(kindOf),
       uraIndicators: this.uraIndicators().map(kindOf),
+      sanma: this.sanma,
+      nukiDora: p.kita.length,
     });
   }
 
@@ -334,6 +348,11 @@ export class Game {
           .filter((t): t is TileId => t !== undefined);
         if (kakan.length) opts.kakan = kakan;
       }
+      // 北抜き（三麻）
+      if (this.sanma && this.wall.length > 0) {
+        const norths = (p.riichi ? [p.drawn] : full).filter((t) => kindOf(t) === 30);
+        if (norths.length) opts.nuki = norths;
+      }
     }
     // 打牌
     if (p.riichi && p.drawn !== null) {
@@ -343,7 +362,7 @@ export class Game {
       if (allowed.length === 0) allowed = full;
       opts.discard = allowed;
       // 立直
-      if (closed && !p.riichi && p.score >= 1000 && this.wall.length >= 4 && p.drawn !== null) {
+      if (closed && !p.riichi && p.score >= 1000 && this.wall.length >= this.n && p.drawn !== null) {
         const riichi: TileId[] = [];
         const c = countsOfIds(full);
         const ok = new Map<Kind, boolean>();
@@ -367,7 +386,7 @@ export class Game {
     if (this.phase === 'claims' || this.phase === 'chankan') {
       return [...this.claimOptions.keys()].filter((s) => !this.claimResponses.has(s));
     }
-    if (this.phase === 'roundEnd') return [0, 1, 2, 3].filter((s) => !this.readySeats.has(s));
+    if (this.phase === 'roundEnd') return this.seats().filter((s) => !this.readySeats.has(s));
     return [];
   }
 
@@ -383,7 +402,7 @@ export class Game {
     if (this.phase === 'roundEnd') {
       if (a.type !== 'ready') return false;
       this.readySeats.add(seat);
-      if (this.readySeats.size >= 4) this.nextRound();
+      if (this.readySeats.size >= this.n) this.nextRound();
       return true;
     }
     const opts = this.optionsFor(seat);
@@ -439,7 +458,7 @@ export class Game {
         this.chankanTile = a.tile;
         this.claimOptions.clear();
         this.claimResponses.clear();
-        for (let s = 0; s < 4; s++) {
+        for (let s = 0; s < this.n; s++) {
           if (s === seat) continue;
           if (this.canRon(s, a.tile, true)) this.claimOptions.set(s, { ron: true, pass: true });
         }
@@ -450,6 +469,17 @@ export class Game {
         } else {
           this.afterKan(seat);
         }
+        return true;
+      }
+      case 'nuki': {
+        if (!opts.nuki?.includes(a.tile)) return false;
+        const full = this.fullHand(seat);
+        p.hand = full.filter((t) => t !== a.tile);
+        p.kita.push(a.tile);
+        // 補充牌は牌山の末尾から引く
+        p.drawn = this.wall.pop()!;
+        this.rinshanDraw = true;
+        this.emit(seat, 'nuki');
         return true;
       }
       default:
@@ -492,13 +522,13 @@ export class Game {
     p.discardCount++;
     p.discards.push({ tile, tsumogiri, riichi, called: false });
     this.lastDiscard = { seat, tile };
-    if (this.firstGoAround && seat === (this.dealer + 3) % 4) this.firstGoAround = false;
+    if (this.firstGoAround && seat === (this.dealer + this.n - 1) % this.n) this.firstGoAround = false;
 
     // 他家の鳴き・ロン候補
     this.claimOptions.clear();
     this.claimResponses.clear();
     const k = kindOf(tile);
-    for (let s = 0; s < 4; s++) {
+    for (let s = 0; s < this.n; s++) {
       if (s === seat) continue;
       const q = this.players[s];
       const o: Options = {};
@@ -507,7 +537,7 @@ export class Game {
         const same = q.hand.filter((t) => kindOf(t) === k);
         if (same.length >= 2) o.pon = [pickTiles(q.hand, k, 2)!];
         if (same.length >= 3 && this.kanCount < 4) o.minkan = true;
-        if (s === (seat + 1) % 4 && k < 27) {
+        if (!this.sanma && s === (seat + 1) % this.n && k < 27) {
           const n = k % 9;
           const chi: TileId[][] = [];
           for (const [a, b] of [[-2, -1], [-1, 1], [1, 2]]) {
@@ -534,7 +564,7 @@ export class Game {
   private markPassedRon(tile: TileId, skipSeat: number | null) {
     // 見逃し: 待ち牌が出たのにロンしなかった場合のフリテン
     const k = kindOf(tile);
-    for (let s = 0; s < 4; s++) {
+    for (let s = 0; s < this.n; s++) {
       if (s === skipSeat || (this.lastDiscard && s === this.lastDiscard.seat)) continue;
       if (this.waitsOf(s).includes(k)) {
         const p = this.players[s];
@@ -545,7 +575,7 @@ export class Game {
   }
 
   private resolveClaims() {
-    const order = (from: number) => [1, 2, 3].map((i) => (from + i) % 4);
+    const order = (from: number) => this.seats().slice(1).map((i) => (from + i) % this.n);
     if (this.phase === 'chankan') {
       const from = this.current;
       const tile = this.chankanTile!;
@@ -642,43 +672,47 @@ export class Game {
       this.exhaustiveDraw();
       return;
     }
-    this.draw((from + 1) % 4);
+    this.draw((from + 1) % this.n);
   }
 
   // ------------------------------------------------ 局の終了
 
   private finishWins(wins: { seat: number; from: number | null; hand: TileId[]; winTile: TileId; result: WinResult }[]) {
-    const deltas = [0, 0, 0, 0];
+    const deltas: number[] = this.players.map(() => 0);
     const infos: WinInfo[] = [];
     let dealerWon = false;
     for (const w of wins) {
       const dealer = w.seat === this.dealer;
       if (dealer) dealerWon = true;
       const pay = payments(w.result.base, dealer, w.from === null);
+      // 三麻のツモは「ツモ損」（いない1人分は誰も払わない）
+      let points = pay.total;
       if (w.from === null) {
-        for (let s = 0; s < 4; s++) {
+        points = 0;
+        for (let s = 0; s < this.n; s++) if (s !== w.seat) points += s === this.dealer ? pay.fromDealer : pay.fromOthers;
+        for (let s = 0; s < this.n; s++) {
           if (s === w.seat) continue;
           const amt = (s === this.dealer ? pay.fromDealer : pay.fromOthers) + this.honba * 100;
           deltas[s] -= amt;
           deltas[w.seat] += amt;
         }
       } else {
-        const amt = pay.total + this.honba * 300;
+        const amt = pay.total + this.honba * 100 * (this.n - 1);
         deltas[w.from] -= amt;
         deltas[w.seat] += amt;
       }
       deltas[w.seat] += this.riichiSticks * 1000;
       infos.push({
-        seat: w.seat, from: w.from, hand: sortTiles(w.hand), melds: this.players[w.seat].melds,
-        winTile: w.winTile, result: w.result, points: pay.total,
+        seat: w.seat, from: w.from, hand: sortTiles(w.hand), melds: this.players[w.seat].melds, kita: this.players[w.seat].kita,
+        winTile: w.winTile, result: w.result, points,
       });
     }
     this.riichiSticks = 0;
-    for (let s = 0; s < 4; s++) this.players[s].score += deltas[s];
-    const revealed: (TileId[] | null)[] = [null, null, null, null];
+    for (let s = 0; s < this.n; s++) this.players[s].score += deltas[s];
+    const revealed: (TileId[] | null)[] = this.players.map(() => null);
     for (const w of infos) revealed[w.seat] = w.hand;
     this.result = {
-      kind: 'win', wins: infos, tenpai: [false, false, false, false], deltas,
+      kind: 'win', wins: infos, tenpai: this.players.map(() => false), deltas,
       scores: this.players.map((p) => p.score), doraIndicators: this.doraIndicators(),
       uraIndicators: this.players.some((p, i) => p.riichi && wins.some((w) => w.seat === i)) ? this.uraIndicators() : [],
       revealed,
@@ -689,11 +723,13 @@ export class Game {
   private exhaustiveDraw() {
     const tenpai = this.players.map((_, s) => this.waitsOf(s).length > 0);
     const n = tenpai.filter(Boolean).length;
-    const deltas = [0, 0, 0, 0];
-    if (n > 0 && n < 4) {
-      for (let s = 0; s < 4; s++) deltas[s] = tenpai[s] ? 3000 / n : -3000 / (4 - n);
+    const deltas: number[] = this.players.map(() => 0);
+    if (n > 0 && n < this.n) {
+      // 四麻: 場に3000点 / 三麻: 場に2000点
+      const pot = this.sanma ? 2000 : 3000;
+      for (let s = 0; s < this.n; s++) deltas[s] = tenpai[s] ? pot / n : -pot / (this.n - n);
     }
-    for (let s = 0; s < 4; s++) this.players[s].score += deltas[s];
+    for (let s = 0; s < this.n; s++) this.players[s].score += deltas[s];
     this.emit(this.current, 'draw');
     this.result = {
       kind: 'draw', wins: [], tenpai, deltas, scores: this.players.map((p) => p.score),
@@ -711,21 +747,21 @@ export class Game {
     this.drawRound = draw;
     this.phase = 'roundEnd';
     this.readySeats.clear();
-    for (let s = 0; s < 4; s++) if (this.players[s].isCpu) this.readySeats.add(s);
-    if (this.readySeats.size >= 4) this.nextRound();
+    for (let s = 0; s < this.n; s++) if (this.players[s].isCpu) this.readySeats.add(s);
+    if (this.readySeats.size >= this.n) this.nextRound();
   }
 
   private isGameOver(): boolean {
     if (this.players.some((p) => p.score < 0)) return true;
     const lastWind = this.config.length === 'tonpu' ? 0 : 1;
-    const isAllLast = this.roundWind === lastWind && this.roundNum === 3;
+    const isAllLast = this.roundWind === lastWind && this.roundNum === this.n - 1;
     const beyond = this.roundWind > lastWind;
     if (beyond) return true;
     if (isAllLast) {
       if (!this.renchan) return true;
       // あがりやめ: 親がトップなら終了
       const top = Math.max(...this.players.map((p) => p.score));
-      if (this.players[this.dealer].score === top && this.players[this.dealer].score >= 30000) return true;
+      if (this.players[this.dealer].score === top && this.players[this.dealer].score >= (this.sanma ? 40000 : 30000)) return true;
     }
     return false;
   }
@@ -740,7 +776,7 @@ export class Game {
     } else {
       this.honba = this.drawRound ? this.honba + 1 : 0;
       this.roundNum++;
-      if (this.roundNum === 4) {
+      if (this.roundNum === this.n) {
         this.roundNum = 0;
         this.roundWind++;
       }
@@ -755,7 +791,7 @@ export class Game {
 
   private finishGame() {
     // 供託はトップ取り
-    const order = [0, 1, 2, 3].sort((a, b) => this.players[b].score - this.players[a].score || a - b);
+    const order = this.seats().sort((a, b) => this.players[b].score - this.players[a].score || a - b);
     this.players[order[0]].score += this.riichiSticks * 1000;
     this.riichiSticks = 0;
     this.final = {
@@ -791,7 +827,7 @@ export class Game {
       }
       return {
         seat: s, name: p.name, score: p.score, isCpu: p.isCpu, connected: this.connected[s],
-        hand, drawn, melds: p.melds, discards: p.discards, riichi: p.riichi,
+        hand, drawn, melds: p.melds, discards: p.discards, riichi: p.riichi, kita: p.kita,
       };
     });
     const waits = this.phase === 'gameEnd' ? [] : this.waitsOf(you);

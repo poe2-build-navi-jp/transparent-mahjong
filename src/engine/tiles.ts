@@ -28,7 +28,8 @@ export const YAOCHU_KINDS: Kind[] = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32
 export const EAST = 27;
 
 /** ドラ表示牌からドラを求める */
-export function doraFromIndicator(k: Kind): Kind {
+export function doraFromIndicator(k: Kind, sanma = false): Kind {
+  if (sanma && k === 0) return 8;
   if (k < 27) return Math.floor(k / 9) * 9 + ((k % 9) + 1) % 9;
   if (k <= 30) return 27 + ((k - 27 + 1) % 4);
   return 31 + ((k - 31 + 1) % 3);

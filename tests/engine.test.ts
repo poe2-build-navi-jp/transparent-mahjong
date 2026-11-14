@@ -76,8 +76,10 @@ describe('yaku & score', () => {
 
 describe('full game simulation', () => {
   it('cpu-only games finish with consistent scores', () => {
-    for (let n = 0; n < 6; n++) {
-      const g = new Game({ names: ['A', 'B', 'C', 'D'], cpu: [true, true, true, true], length: 'tonpu' });
+    for (let n = 0; n < 12; n++) {
+      const names = n % 2 ? ['A', 'B', 'C'] : ['A', 'B', 'C', 'D'];
+      const g = new Game({ names, cpu: names.map(() => true), length: 'tonpu' });
+      const totalStart = g.players.reduce((a, p) => a + p.score, 0);
       let steps = 0;
       while (g.phase !== 'gameEnd' && steps < 20000) {
         const pend = g.pendingSeats();
@@ -91,12 +93,13 @@ describe('full game simulation', () => {
         }
         steps++;
         const total = g.players.reduce((a, p) => a + p.score, 0) + g.riichiSticks * 1000;
-        expect(total).toBe(100000);
+        expect(total).toBe(totalStart);
+        if (names.length === 3) for (const p of g.players) for (const t of g.fullHand(g.players.indexOf(p))) expect(t >> 2 === 0 || t >> 2 >= 8).toBe(true);
         const tiles = g.players.reduce((a, p) => a + p.hand.length + (p.drawn !== null ? 1 : 0) + p.melds.reduce((x, m) => x + m.tiles.length, 0), 0);
         expect(tiles).toBeGreaterThan(0);
       }
       expect(g.phase).toBe('gameEnd');
-      expect(g.final!.ranking.length).toBe(4);
+      expect(g.final!.ranking.length).toBe(names.length);
     }
   }, 120000);
 });

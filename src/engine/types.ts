@@ -48,4 +48,8 @@ export interface WinContext {
   roundWind: Kind;
   doraIndicators: Kind[];
   uraIndicators: Kind[];
+  /** 三人麻雀（1萬表示のドラは9萬） */
+  sanma?: boolean;
+  /** 抜きドラの枚数 */
+  nukiDora?: number;
 }
