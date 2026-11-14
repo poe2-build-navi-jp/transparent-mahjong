@@ -52,4 +52,8 @@ export interface WinContext {
   sanma?: boolean;
   /** 抜きドラの枚数 */
   nukiDora?: number;
+  /** 赤ドラの枚数 */
+  akaDora?: number;
+  /** 喰いタン（省略時あり） */
+  kuitan?: boolean;
 }

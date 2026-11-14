@@ -4,6 +4,7 @@ import {
   EAST, NUM_TILES, countsOfIds, isOpaque, kindOf, sortTiles, type Kind, type TileId,
 } from './tiles';
 import type { Meld, WinResult } from './types';
+import { DEFAULT_RULES, isAkaId, sanitizeRules, startScoreOf, type Rules } from './rules';
 
 // ---------------------------------------------------------------- 型
 
@@ -101,6 +102,8 @@ export interface GameConfig {
   cpu: boolean[];
   length: 'tonpu' | 'hanchan';
   startScore?: number;
+  /** 詳細ルール（省略時は標準） */
+  rules?: Partial<Rules>;
 }
 
 // ---------------------------------------------------------------- ビュー
@@ -139,6 +142,10 @@ export interface GameView {
   event: GameEvent | null;
   /** 持ち時間の残り（ミリ秒、送信時点） */
   deadline: number | null;
+  /** 残りの持ち時間（ミリ秒）。deadline のうちこの分が持ち時間 */
+  bank: number | null;
+  /** 赤ドラありか（描画用） */
+  aka: boolean;
   length: 'tonpu' | 'hanchan';
   /** 自分の待ち（テンパイ時） */
   waits: Kind[];
@@ -196,10 +203,12 @@ export class Game {
   eventSeq = 0;
   connected: boolean[] = [true, true, true, true];
   version = 0;
+  rules: Rules;
 
   constructor(config: GameConfig) {
     this.config = config;
-    const start = config.startScore ?? (config.names.length === 3 ? 35000 : 25000);
+    this.rules = sanitizeRules({ ...DEFAULT_RULES, ...config.rules, count: config.names.length === 3 ? 3 : 4, length: config.length });
+    const start = config.startScore ?? startScoreOf(this.rules);
     this.players = config.names.map((name, i) => ({
       name, isCpu: config.cpu[i], hand: [], drawn: null, melds: [], discards: [], score: start,
       riichi: false, doubleRiichi: false, ippatsu: false, furitenTemp: false, furitenRiichi: false,
@@ -315,6 +324,8 @@ export class Game {
       uraIndicators: this.uraIndicators().map(kindOf),
       sanma: this.sanma,
       nukiDora: p.kita.length,
+      akaDora: this.rules.aka ? [...hand, ...p.melds.flatMap((m) => m.tiles)].filter(isAkaId).length : 0,
+      kuitan: this.rules.kuitan,
     });
   }
 
@@ -752,7 +763,7 @@ export class Game {
   }
 
   private isGameOver(): boolean {
-    if (this.players.some((p) => p.score < 0)) return true;
+    if (this.rules.tobi && this.players.some((p) => p.score < 0)) return true;
     const lastWind = this.config.length === 'tonpu' ? 0 : 1;
     const isAllLast = this.roundWind === lastWind && this.roundNum === this.n - 1;
     const beyond = this.roundWind > lastWind;
@@ -809,7 +820,7 @@ export class Game {
 
   // ------------------------------------------------ ビュー
 
-  viewFor(you: number, deadline: number | null = null): GameView {
+  viewFor(you: number, deadline: number | null = null, bank: number | null = null): GameView {
     const players: PlayerView[] = this.players.map((p, s) => {
       const self = s === you;
       const showAll = self || this.phase === 'gameEnd';
@@ -840,7 +851,7 @@ export class Game {
       riichiSticks: this.riichiSticks, wallCount: this.wall.length,
       doraIndicators: this.doraIndicators(), current: this.current, phase: this.phase,
       lastDiscard: this.lastDiscard, options: this.optionsFor(you), result: this.result,
-      final: this.final, event: this.event, deadline, length: this.config.length,
+      final: this.final, event: this.event, deadline, bank, length: this.config.length, aka: this.rules.aka,
       waits, furiten: waits.length > 0 && this.isFuriten(you),
     };
   }

@@ -80,7 +80,8 @@ function hasYakuPotential(g: Game, seat: number, extraTrip: Kind | null): boolea
   if (p.melds.some((m) => m.type !== 'chi' && isYakuhai(kindOf(m.tiles[0])))) return true;
   const c = countsOfIds(p.hand);
   for (let k = 27; k < 34; k++) if (isYakuhai(k) && c[k] >= 2) return true;
-  // 断幺九を狙えるか
+  // 断幺九を狙えるか（喰いタンなしなら鳴いた時点で不可）
+  if (!g.rules.kuitan) return false;
   const all = [...p.hand, ...p.melds.flatMap((m) => m.tiles)].map(kindOf);
   const yaochu = all.filter((k) => isHonor(k) || k % 9 === 0 || k % 9 === 8).length;
   return yaochu <= 1 && p.melds.every((m) => m.tiles.every((t) => {

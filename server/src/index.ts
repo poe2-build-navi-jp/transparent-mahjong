@@ -9,6 +9,7 @@
 import type { Action, GameView } from '../../src/engine/game';
 import { GameHost } from '../../src/net/host';
 import { sanitizeName } from '../../src/net/names';
+import { DEFAULT_RULES, sanitizeRules, type Rules } from '../../src/engine/rules';
 
 export interface Env {
   ROOMS: DurableObjectNamespace;
@@ -83,7 +84,8 @@ export default {
 
 type ClientMsg =
   | { t: 'hello'; name: string; token: string }
-  | { t: 'start'; length: 'tonpu' | 'hanchan'; count: 3 | 4 }
+  | { t: 'start'; rules?: Rules; length?: 'tonpu' | 'hanchan'; count?: 3 | 4 }
+  | { t: 'rules'; rules: Rules }
   | { t: 'act'; a: Action }
   | { t: 'ping' };
 
@@ -101,7 +103,7 @@ export class Room implements DurableObject {
   private members: Member[] = [];
   private host: GameHost | null = null;
   private hostToken = '';
-  private count: 3 | 4 = 4;
+  private rules: Rules = { ...DEFAULT_RULES };
   private finished = false;
 
   constructor(private state: DurableObjectState, _env: Env) {}
@@ -145,7 +147,7 @@ export class Room implements DurableObject {
   private lobby() {
     const list = this.members.map((m) => ({ name: m.name, host: m.token === this.hostToken, online: m.ws !== null }));
     for (const m of this.members) {
-      this.send(m.ws, { t: 'lobby', code: this.code, members: list, youAreHost: m.token === this.hostToken });
+      this.send(m.ws, { t: 'lobby', code: this.code, members: list, youAreHost: m.token === this.hostToken, rules: this.rules });
     }
   }
 
@@ -191,14 +193,22 @@ export class Room implements DurableObject {
         return;
       }
       if (!me) return;
+      if (msg.t === 'rules') {
+        if (me.token !== this.hostToken || this.host) return;
+        this.rules = sanitizeRules(msg.rules);
+        this.lobby();
+        return;
+      }
       if (msg.t === 'start') {
         if (me.token !== this.hostToken || this.host) return;
-        const count = msg.count === 3 ? 3 : 4;
+        this.rules = sanitizeRules(msg.rules ?? { ...this.rules, length: msg.length, count: msg.count });
+        const count = this.rules.count;
         if (this.members.length > count) {
           this.send(ws, { t: 'error', msg: `${count === 3 ? '三人' : '四人'}麻雀は${count}人までです` });
+          this.lobby();
           return;
         }
-        this.startGame(msg.length === 'hanchan' ? 'hanchan' : 'tonpu', count);
+        this.startGame();
         return;
       }
       if (msg.t === 'act' && this.host && me.seat >= 0) {
@@ -223,8 +233,8 @@ export class Room implements DurableObject {
     ws.addEventListener('error', onClose);
   }
 
-  private startGame(length: 'tonpu' | 'hanchan', count: 3 | 4) {
-    this.count = count;
+  private startGame() {
+    const { count, length } = this.rules;
     const people: (Member | null)[] = [...this.members];
     while (people.length < count) people.push(null);
     // 席順はランダム
@@ -241,7 +251,7 @@ export class Room implements DurableObject {
       p.seat = seat;
       return { send: (v: GameView) => this.send(p.ws, { t: 'view', v }) };
     });
-    this.host = new GameHost({ names, cpu: people.map((p) => p === null), length }, links, { timed: true });
+    this.host = new GameHost({ names, cpu: people.map((p) => p === null), length, rules: this.rules }, links, { timed: true });
     this.host.start();
     // 開始時点で切断していた人の席はCPUに
     for (const p of people) if (p && !p.ws) this.host.disconnect(p.seat);
@@ -264,7 +274,7 @@ export class Room implements DurableObject {
     this.reserved = false;
     this.finished = false;
     this.hostToken = '';
-    void this.count;
+    this.rules = { ...DEFAULT_RULES };
     await this.state.storage.deleteAll();
   }
 }

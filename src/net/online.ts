@@ -2,6 +2,7 @@ import Peer, { type DataConnection } from 'peerjs';
 import type { Action, GameView } from '../engine/game';
 import { GameHost } from './host';
 import { sanitizeName } from './names';
+import { DEFAULT_RULES, sanitizeRules, type Rules } from '../engine/rules';
 
 /**
  * オンライン対戦（P2P / WebRTC）。
@@ -59,7 +60,7 @@ export interface Member {
 
 type ClientMsg = { t: 'hello'; name: string; token: string } | { t: 'act'; a: Action };
 type HostMsg =
-  | { t: 'lobby'; members: Member[]; code: string }
+  | { t: 'lobby'; members: Member[]; code: string; rules?: Rules }
   | { t: 'view'; v: GameView }
   | { t: 'error'; msg: string }
   | { t: 'closed' };
@@ -122,7 +123,7 @@ export class RoomHost {
   private broadcastLobby() {
     const members = this.members();
     this.onLobby(members);
-    for (const g of this.guests) this.sendTo(g.conn, { t: 'lobby', members, code: this.code });
+    for (const g of this.guests) this.sendTo(g.conn, { t: 'lobby', members, code: this.code, rules: this.rules });
   }
 
   private sendTo(conn: DataConnection | null, msg: HostMsg) {
@@ -171,7 +172,18 @@ export class RoomHost {
   }
 
   /** 空席は CPU で埋めて開始。席順はランダム */
-  start(length: 'tonpu' | 'hanchan', count: 3 | 4 = 4) {
+  rules: Rules = { ...DEFAULT_RULES };
+
+  setRules(r: Rules) {
+    const next = sanitizeRules(r);
+    if (JSON.stringify(next) === JSON.stringify(this.rules)) return;
+    this.rules = next;
+    for (const g of this.guests) this.sendTo(g.conn, { t: 'lobby', members: this.members(), code: this.code, rules: this.rules });
+  }
+
+  start(rules: Rules) {
+    this.setRules(rules);
+    const { length, count } = this.rules;
     this.guests = this.guests.slice(0, count - 1);
     const people = [{ name: this.name, guest: null as Guest | null }, ...this.guests.map((g) => ({ name: g.name, guest: g as Guest | null }))];
     const cpuNames = ['CPU 白鷺', 'CPU 烏', 'CPU 鷹'];
@@ -191,7 +203,7 @@ export class RoomHost {
       }
       return {};
     });
-    this.host = new GameHost({ names: seats.map((p) => p.name), cpu, length }, links, { timed: true });
+    this.host = new GameHost({ names: seats.map((p) => p.name), cpu, length, rules: this.rules }, links, { timed: true });
     this.host.start();
   }
 
@@ -211,7 +223,7 @@ export class RoomHost {
 export class RoomClient {
   peer!: Peer;
   conn: DataConnection | null = null;
-  onLobby: (members: Member[]) => void = () => {};
+  onLobby: (members: Member[], rules: Rules) => void = () => {};
   onView: (v: GameView) => void = () => {};
   onError: (msg: string) => void = () => {};
   onClosed: () => void = () => {};
@@ -251,7 +263,7 @@ export class RoomClient {
     });
     conn.on('data', (raw) => {
       const msg = raw as HostMsg;
-      if (msg.t === 'lobby') this.onLobby(msg.members);
+      if (msg.t === 'lobby') this.onLobby(msg.members, sanitizeRules(msg.rules ?? DEFAULT_RULES));
       else if (msg.t === 'view') this.onView(msg.v);
       else if (msg.t === 'error') this.onError(msg.msg);
       else if (msg.t === 'closed') { this.closedByUser = true; this.onClosed(); }

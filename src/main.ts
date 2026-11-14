@@ -5,7 +5,9 @@ import { GameHost } from './net/host';
 import { sanitizeName } from './net/names';
 import { normalizeCode, RoomClient, RoomHost, type Member } from './net/online';
 import { createRoomCode, detectServer, useServer, WsRoom } from './net/wsroom';
+import { DEFAULT_RULES, sanitizeRules, type Rules } from './engine/rules';
 import { audio } from './ui/audio';
+import { bindRulesPanel, rulesPanelHtml, rulesSummaryHtml } from './ui/rulesPanel';
 import { haptics } from './ui/haptics';
 import { TableUI, tileHtml } from './ui/table';
 
@@ -20,18 +22,25 @@ const store = {
   set name(v: string) {
     try { localStorage.setItem('tmj-name', v); } catch { /* noop */ }
   },
-  get length(): Length {
-    try { return (localStorage.getItem('tmj-length') as Length) || 'tonpu'; } catch { return 'tonpu'; }
+  /** 前回のルール（人数・長さは以前の保存形式からも引き継ぐ） */
+  get rules(): Rules {
+    try {
+      const saved = JSON.parse(localStorage.getItem('tmj-rules') ?? 'null');
+      if (saved) return sanitizeRules(saved);
+      return sanitizeRules({
+        ...DEFAULT_RULES,
+        count: localStorage.getItem('tmj-count') === '3' ? 3 : 4,
+        length: localStorage.getItem('tmj-length') === 'hanchan' ? 'hanchan' : 'tonpu',
+      });
+    } catch { return { ...DEFAULT_RULES }; }
   },
-  set length(v: Length) {
-    try { localStorage.setItem('tmj-length', v); } catch { /* noop */ }
+  set rules(v: Rules) {
+    try { localStorage.setItem('tmj-rules', JSON.stringify(sanitizeRules(v))); } catch { /* noop */ }
   },
-  get count(): 3 | 4 {
-    try { return localStorage.getItem('tmj-count') === '3' ? 3 : 4; } catch { return 4; }
-  },
-  set count(v: 3 | 4) {
-    try { localStorage.setItem('tmj-count', String(v)); } catch { /* noop */ }
-  },
+  get length(): Length { return this.rules.length; },
+  set length(v: Length) { this.rules = { ...this.rules, length: v }; },
+  get count(): 3 | 4 { return this.rules.count; },
+  set count(v: 3 | 4) { this.rules = { ...this.rules, count: v }; },
 };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -112,6 +121,7 @@ ${optionsHtml()}
         <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button>
         <button class="toggle ${haptics.enabled ? 'on' : ''}" data-vibe="1">振動</button>
       </div>
+      <button class="link" id="ruleset">詳細ルール設定（CPU対戦）</button>
       <button class="link" id="rules">ルール説明</button>
       ${error ? `<div class="err">${esc(error)}</div>` : ''}
     </div>
@@ -124,6 +134,23 @@ ${optionsHtml()}
   document.getElementById('create')!.addEventListener('click', () => createRoom(playerName()));
   document.getElementById('join')!.addEventListener('click', () => joinScreen(playerName()));
   document.getElementById('rules')!.addEventListener('click', rulesScreen);
+  document.getElementById('ruleset')!.addEventListener('click', ruleSettingsScreen);
+}
+
+function ruleSettingsScreen() {
+  const render = () => {
+    setScreen(`
+    <div class="screen rules">
+      <div class="card wide">
+        <h2>詳細ルール設定</h2>
+        ${rulesPanelHtml(store.rules, 'CPU対戦では時間制限なし（オンライン対戦のみ）')}
+        <button class="big primary" id="back">決定</button>
+      </div>
+    </div>`);
+    bindRulesPanel(app, () => store.rules, (r) => { store.rules = r; render(); });
+    document.getElementById('back')!.addEventListener('click', () => titleScreen());
+  };
+  render();
 }
 
 function rulesScreen() {
@@ -141,8 +168,10 @@ function rulesScreen() {
       </ul>
       <h3>基本ルール</h3>
       <ul>
-        <li>四人麻雀（25,000点持ち）／三人麻雀（35,000点持ち）、東風戦／半荘戦を選択。</li>
-        <li>一般的なリーチ麻雀の役と点数計算（喰いタンあり・後付けあり・赤ドラなし）。</li>
+        <li>四人麻雀（標準25,000点持ち）／三人麻雀（標準35,000点持ち）、東風戦／半荘戦を選択。</li>
+        <li>一般的なリーチ麻雀の役と点数計算（後付けあり）。</li>
+        <li>持ち点・考慮時間・持ち時間・赤ドラ・喰いタン・トビは、ルームを作った人が対局前に変更できます（CPU対戦はタイトル画面の「詳細ルール設定」）。</li>
+        <li>考慮時間は1手ごとにリセットされ、超えた分は持ち時間から減ります。両方使い切ると自動でツモ切り（鳴きはスキップ）になります。</li>
         <li>ダブロンなし（頭ハネ）、途中流局なし、トビ終了あり。</li>
         <li>フリテン（捨て牌・同巡・立直後見逃し）あり。</li>
       </ul>
@@ -186,7 +215,7 @@ function startCpuGame(name: string) {
   let table: TableUI;
   const links = names.map((_, s) => (s === seat ? { send: (v: GameView) => table.update(v) } : {}));
   const host = new GameHost(
-    { names, cpu: names.map((_, s) => s !== seat), length: store.length },
+    { names, cpu: names.map((_, s) => s !== seat), length: store.length, rules: store.rules },
     links, { timed: false },
   );
   table = new TableUI(app, (a) => host.action(seat, a), () => titleScreen(), count === 3 ? 'CPU対戦（三麻）' : 'CPU対戦');
@@ -196,8 +225,8 @@ function startCpuGame(name: string) {
 
 // ---------------------------------------------------------------- オンライン
 
-function lobbyHtml(code: string, members: Member[], isHost: boolean): string {
-  const seats = (isHost ? Array.from({ length: store.count }, (_, i) => i) : members.map((_, i) => i)).map((i) => {
+function lobbyHtml(code: string, members: Member[], isHost: boolean, rules: Rules = store.rules): string {
+  const seats = Array.from({ length: Math.max(rules.count, members.length) }, (_, i) => i).map((i) => {
     const m = members[i];
     return `<div class="lseat ${m ? 'filled' : ''}">${m ? `${esc(m.name)}${m.host ? ' <span class="badge">ホスト</span>' : ''}` : '<span class="empty">空席（CPU）</span>'}</div>`;
   }).join('');
@@ -214,16 +243,16 @@ function lobbyHtml(code: string, members: Member[], isHost: boolean): string {
       <input class="urlbox" readonly value="${esc(url)}">
       <div class="seats">${seats}</div>
       ${isHost
-        ? `${optionsHtml()}
+        ? `<h3 class="lh">ルール設定</h3>${rulesPanelHtml(rules)}
           <button class="big primary" id="start">対局開始（空席はCPU）</button>`
-        : '<div class="waiting">ホストが開始するのを待っています…</div>'}
+        : `${rulesSummaryHtml(rules)}<div class="waiting">ホストが開始するのを待っています…</div>`}
       <button class="link" id="leave">退出</button>
       <div class="err" id="err"></div>
     </div>
   </div>`;
 }
 
-function bindLobby(code: string, leave: () => void, onCount: () => void = () => {}) {
+function bindLobby(code: string, leave: () => void, onRules: (r: Rules) => void = () => {}) {
   const url = `${location.origin}${location.pathname}?room=${code}`;
   document.getElementById('copy')?.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(code); flash('コピーしました'); } catch { flash(code); }
@@ -236,7 +265,8 @@ function bindLobby(code: string, leave: () => void, onCount: () => void = () => 
       try { await navigator.clipboard.writeText(`${text}\n${url}`); flash('招待リンクをコピーしました'); } catch { flash(url); }
     }
   });
-  bindOptions(onCount);
+  bindOptions();
+  bindRulesPanel(app, () => store.rules, (r) => { store.rules = r; onRules(store.rules); });
   document.getElementById('leave')!.addEventListener('click', leave);
 }
 
@@ -278,16 +308,20 @@ async function serverRoom(name: string, joinCode: string | null) {
   const room = new WsRoom(name, code);
   let table: TableUI | null = null;
   const leave = () => { activeRoom.set(null); room.close(); titleScreen(); };
-  room.onLobby = (members, youAreHost) => {
+  let sentRules = false;
+  room.onLobby = (members, youAreHost, rules) => {
     if (table) return;
-    app.innerHTML = lobbyHtml(code, members, youAreHost);
-    bindLobby(code, leave, () => room.onLobby(members, youAreHost));
+    // ホストは自分の設定をサーバーへ送る（最初の1回）
+    if (youAreHost && !sentRules) { sentRules = true; room.setRules(store.rules); }
+    const shown = youAreHost ? store.rules : rules;
+    app.innerHTML = lobbyHtml(code, members, youAreHost, shown);
+    bindLobby(code, leave, (r) => { room.setRules(r); room.onLobby(members, youAreHost, r); });
     document.getElementById('start')?.addEventListener('click', () => {
       if (members.length > store.count) {
         document.getElementById('err')!.textContent = '三人麻雀は3人までです。四人麻雀に切り替えてください';
         return;
       }
-      room.start(store.length, store.count);
+      room.start(store.rules);
     });
   };
   room.onView = (v) => {
@@ -335,6 +369,7 @@ async function createRoom(name: string) {
   const leave = () => { room.close(); titleScreen(); };
   const renderLobby = (members: Member[]) => {
     if (table) return;
+    room.setRules(store.rules);
     app.innerHTML = lobbyHtml(code, members, true);
     bindLobby(code, leave, () => renderLobby(room.members()));
     document.getElementById('start')!.addEventListener('click', () => {
@@ -345,7 +380,7 @@ async function createRoom(name: string) {
       table = new TableUI(app, (a) => room.act(a), leave, `ルーム ${code}`);
       app.querySelector('.screen')?.remove();
       room.onView = (v) => table!.update(v);
-      room.start(store.length, store.count);
+      room.start(store.rules);
     });
   };
   room.onLobby = renderLobby;
@@ -385,9 +420,9 @@ async function joinRoom(name: string, code: string) {
   const client = new RoomClient(name, code);
   let table: TableUI | null = null;
   const leave = () => { client.close(); titleScreen(); };
-  client.onLobby = (members) => {
+  client.onLobby = (members, rules) => {
     if (table) return;
-    app.innerHTML = lobbyHtml(code, members, false);
+    app.innerHTML = lobbyHtml(code, members, false, rules);
     bindLobby(code, leave);
   };
   client.onView = (v) => {

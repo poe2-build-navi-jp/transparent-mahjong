@@ -427,3 +427,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .screen { padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
 .credit .plink { display: inline-block; margin-top: 4px; }
+
+.timer { width: auto; min-width: 52px; padding: 0 12px; border-radius: 26px; }
+.timer small { font-size: 14px; color: #cfe; margin-left: 3px; }
+.timer.bank { border-color: #ffb347; color: #ffb347; }
+.tile.aka .face { filter: drop-shadow(0 0 1px rgba(255,255,255,.9)) saturate(1.2); }
+
+/* ルール設定 */
+.lh { margin: 6px 0 0 !important; text-align: left; }
+.rules-panel { display: flex; flex-direction: column; gap: 10px; }
+.rrow { display: flex; flex-direction: column; gap: 5px; }
+.rrow.disabled { opacity: .4; }
+.rlabel { font-size: 13px; font-weight: 700; color: #dfe9e6; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.rlabel small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.ropts { display: flex; flex-wrap: wrap; gap: 4px; background: rgba(0,0,0,.3); border-radius: 10px; padding: 4px; }
+.ropts button { flex: 1 0 auto; min-width: 54px; border: none; background: transparent; padding: 8px 8px; border-radius: 8px; color: var(--muted); font-weight: 700; font-size: 13px; }
+.ropts button.on { background: rgba(233, 196, 106, .2); color: var(--gold); box-shadow: inset 0 0 0 1px var(--line); }
+.ropts button:disabled { cursor: default; }
+.rules-summary { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.25); }
+.rules-summary .rs-title { width: 100%; font-size: 12px; color: var(--gold); font-weight: 700; }
+.rules-summary span { font-size: 12px; padding: 4px 9px; border-radius: 12px; background: rgba(255,255,255,.08); }
+.timer.show { display: flex; align-items: baseline; justify-content: center; white-space: nowrap; }
