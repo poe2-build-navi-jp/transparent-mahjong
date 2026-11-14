@@ -2,6 +2,7 @@ import './ui/styles.css';
 import type { GameView } from './engine/game';
 import { GameHost } from './net/host';
 import { normalizeCode, RoomClient, RoomHost, type Member } from './net/online';
+import { audio } from './ui/audio';
 import { TableUI, tileHtml } from './ui/table';
 
 const app = document.getElementById('app')!;
@@ -20,6 +21,12 @@ const store = {
   },
   set length(v: Length) {
     try { localStorage.setItem('tmj-length', v); } catch { /* noop */ }
+  },
+  get count(): 3 | 4 {
+    try { return localStorage.getItem('tmj-count') === '3' ? 3 : 4; } catch { return 4; }
+  },
+  set count(v: 3 | 4) {
+    try { localStorage.setItem('tmj-count', String(v)); } catch { /* noop */ }
   },
 };
 
@@ -44,10 +51,40 @@ function decoTiles(): string {
   return ids.map((id, i) => `<div class="deco d${i}">${tileHtml(id, { size: 'hand' })}</div>`).join('');
 }
 
+const CREDIT = '<div class="credit">音声素材：<a href="https://amitaro.net/" target="_blank" rel="noopener">あみたろの声素材工房（https://amitaro.net/）</a><br>BGM・効果音・牌デザイン：オリジナル</div>';
+
+function optionsHtml(): string {
+  const len = store.length;
+  const cnt = store.count;
+  return `
+      <div class="seg" role="radiogroup">
+        <button class="${cnt === 4 ? 'on' : ''}" data-count="4">四人麻雀</button>
+        <button class="${cnt === 3 ? 'on' : ''}" data-count="3">三人麻雀</button>
+      </div>
+      <div class="seg" role="radiogroup">
+        <button class="${len === 'tonpu' ? 'on' : ''}" data-len="tonpu">東風戦</button>
+        <button class="${len === 'hanchan' ? 'on' : ''}" data-len="hanchan">半荘戦</button>
+      </div>`;
+}
+
+function bindOptions(onChange: () => void = () => {}) {
+  app.querySelectorAll<HTMLButtonElement>('[data-len]').forEach((b) => b.addEventListener('click', () => {
+    store.length = b.dataset.len as Length;
+    app.querySelectorAll('[data-len]').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  app.querySelectorAll<HTMLButtonElement>('[data-count]').forEach((b) => b.addEventListener('click', () => {
+    store.count = b.dataset.count === '3' ? 3 : 4;
+    app.querySelectorAll('[data-count]').forEach((x) => x.classList.toggle('on', x === b));
+    onChange();
+  }));
+  app.querySelectorAll<HTMLButtonElement>('[data-audio]').forEach((b) => b.addEventListener('click', () => {
+    b.classList.toggle('on', audio.toggle(b.dataset.audio as 'bgm' | 'voice'));
+  }));
+}
+
 // ---------------------------------------------------------------- タイトル
 
 function titleScreen(error = '') {
-  const len = store.length;
   setScreen(`
   <div class="screen title">
     <div class="decos">${decoTiles()}</div>
@@ -55,23 +92,23 @@ function titleScreen(error = '') {
     <div class="tagline">４枚のうち３枚は透けて見える ― 読み合いの麻雀</div>
     <div class="card">
       <label class="field"><span>プレイヤー名</span><input id="name" maxlength="12" value="${esc(store.name)}" placeholder="あなた"></label>
-      <div class="seg" role="radiogroup">
-        <button class="${len === 'tonpu' ? 'on' : ''}" data-len="tonpu">東風戦</button>
-        <button class="${len === 'hanchan' ? 'on' : ''}" data-len="hanchan">半荘戦</button>
-      </div>
+${optionsHtml()}
       <button class="big primary" id="cpu">CPU対戦</button>
       <div class="row2">
         <button class="big" id="create">ルームを作る</button>
         <button class="big" id="join">コードで参加</button>
       </div>
+      <div class="audio-row">
+        <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
+        <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button>
+      </div>
       <button class="link" id="rules">ルール説明</button>
       ${error ? `<div class="err">${esc(error)}</div>` : ''}
     </div>
+    ${CREDIT}
   </div>`);
-  app.querySelectorAll<HTMLButtonElement>('[data-len]').forEach((b) => b.addEventListener('click', () => {
-    store.length = b.dataset.len as Length;
-    app.querySelectorAll('[data-len]').forEach((x) => x.classList.toggle('on', x === b));
-  }));
+  audio.startBgm();
+  bindOptions();
   document.getElementById('cpu')!.addEventListener('click', () => startCpuGame(playerName()));
   document.getElementById('create')!.addEventListener('click', () => createRoom(playerName()));
   document.getElementById('join')!.addEventListener('click', () => joinScreen(playerName()));
@@ -92,16 +129,27 @@ function rulesScreen() {
       </ul>
       <h3>基本ルール</h3>
       <ul>
-        <li>4人打ち・25,000点持ち。東風戦／半荘戦を選択。</li>
+        <li>四人麻雀（25,000点持ち）／三人麻雀（35,000点持ち）、東風戦／半荘戦を選択。</li>
         <li>一般的なリーチ麻雀の役と点数計算（喰いタンあり・後付けあり・赤ドラなし）。</li>
         <li>ダブロンなし（頭ハネ）、途中流局なし、トビ終了あり。</li>
         <li>フリテン（捨て牌・同巡・立直後見逃し）あり。</li>
+      </ul>
+      <h3>三人麻雀</h3>
+      <ul>
+        <li>萬子の2〜8を使いません（108枚）。チーはできません。</li>
+        <li>北は「北抜き」で抜きドラにできます（1枚につき1翻）。</li>
+        <li>ツモ和了はツモ損（いない1人分は加算されません）。ノーテン罰符は場に2,000点。</li>
       </ul>
       <h3>オンライン対戦</h3>
       <ul>
         <li>「ルームを作る」で6文字のコードが発行されます。友達にコードを共有してください。</li>
         <li>「コードで参加」でコードを入力すると同じ卓に入れます。空いた席はCPUが入ります。</li>
         <li>通信が切れた席はCPUが代打ちし、再接続すると復帰します。</li>
+      </ul>
+      <h3>クレジット</h3>
+      <ul>
+        <li>音声素材：<a href="https://amitaro.net/" target="_blank" rel="noopener" style="color:var(--gold)">あみたろの声素材工房（https://amitaro.net/）</a></li>
+        <li>BGM・効果音・牌デザイン：オリジナル</li>
       </ul>
       <button class="big primary" id="back">戻る</button>
     </div>
@@ -113,18 +161,19 @@ function rulesScreen() {
 
 function startCpuGame(name: string) {
   setScreen('');
-  const seat = Math.floor(Math.random() * 4);
+  const count = store.count;
+  const seat = Math.floor(Math.random() * count);
   const cpuNames = ['CPU 白鷺', 'CPU 烏', 'CPU 鷹'];
   const names: string[] = [];
   let ci = 0;
-  for (let s = 0; s < 4; s++) names.push(s === seat ? name : cpuNames[ci++]);
+  for (let s = 0; s < count; s++) names.push(s === seat ? name : cpuNames[ci++]);
   let table: TableUI;
   const links = names.map((_, s) => (s === seat ? { send: (v: GameView) => table.update(v) } : {}));
   const host = new GameHost(
     { names, cpu: names.map((_, s) => s !== seat), length: store.length },
     links, { timed: false },
   );
-  table = new TableUI(app, (a) => host.action(seat, a), () => titleScreen(), 'CPU対戦');
+  table = new TableUI(app, (a) => host.action(seat, a), () => titleScreen(), count === 3 ? 'CPU対戦（三麻）' : 'CPU対戦');
   cleanup = () => { host.stop(); table.destroy(); };
   host.start();
 }
@@ -132,7 +181,7 @@ function startCpuGame(name: string) {
 // ---------------------------------------------------------------- オンライン
 
 function lobbyHtml(code: string, members: Member[], isHost: boolean): string {
-  const seats = [0, 1, 2, 3].map((i) => {
+  const seats = (isHost ? Array.from({ length: store.count }, (_, i) => i) : members.map((_, i) => i)).map((i) => {
     const m = members[i];
     return `<div class="lseat ${m ? 'filled' : ''}">${m ? `${esc(m.name)}${m.host ? ' <span class="badge">ホスト</span>' : ''}` : '<span class="empty">空席（CPU）</span>'}</div>`;
   }).join('');
@@ -149,10 +198,7 @@ function lobbyHtml(code: string, members: Member[], isHost: boolean): string {
       <input class="urlbox" readonly value="${esc(url)}">
       <div class="seats">${seats}</div>
       ${isHost
-        ? `<div class="seg">
-            <button class="${store.length === 'tonpu' ? 'on' : ''}" data-len="tonpu">東風戦</button>
-            <button class="${store.length === 'hanchan' ? 'on' : ''}" data-len="hanchan">半荘戦</button>
-          </div>
+        ? `${optionsHtml()}
           <button class="big primary" id="start">対局開始（空席はCPU）</button>`
         : '<div class="waiting">ホストが開始するのを待っています…</div>'}
       <button class="link" id="leave">退出</button>
@@ -161,7 +207,7 @@ function lobbyHtml(code: string, members: Member[], isHost: boolean): string {
   </div>`;
 }
 
-function bindLobby(code: string, leave: () => void) {
+function bindLobby(code: string, leave: () => void, onCount: () => void = () => {}) {
   const url = `${location.origin}${location.pathname}?room=${code}`;
   document.getElementById('copy')?.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(code); flash('コピーしました'); } catch { flash(code); }
@@ -174,10 +220,7 @@ function bindLobby(code: string, leave: () => void) {
       try { await navigator.clipboard.writeText(`${text}\n${url}`); flash('招待リンクをコピーしました'); } catch { flash(url); }
     }
   });
-  app.querySelectorAll<HTMLButtonElement>('[data-len]').forEach((b) => b.addEventListener('click', () => {
-    store.length = b.dataset.len as Length;
-    app.querySelectorAll('[data-len]').forEach((x) => x.classList.toggle('on', x === b));
-  }));
+  bindOptions(onCount);
   document.getElementById('leave')!.addEventListener('click', leave);
 }
 
@@ -204,12 +247,16 @@ async function createRoom(name: string) {
   const renderLobby = (members: Member[]) => {
     if (table) return;
     app.innerHTML = lobbyHtml(code, members, true);
-    bindLobby(code, leave);
+    bindLobby(code, leave, () => renderLobby(room.members()));
     document.getElementById('start')!.addEventListener('click', () => {
+      if (room.guests.length > store.count - 1) {
+        document.getElementById('err')!.textContent = '三人麻雀は3人までです。四人麻雀に切り替えてください';
+        return;
+      }
       table = new TableUI(app, (a) => room.act(a), leave, `ルーム ${code}`);
       app.querySelector('.screen')?.remove();
       room.onView = (v) => table!.update(v);
-      room.start(store.length);
+      room.start(store.length, store.count);
     });
   };
   room.onLobby = renderLobby;

@@ -17,6 +17,7 @@ function visibleCounts(g: Game, seat: number): number[] {
   g.players.forEach((p, s) => {
     for (const d of p.discards) if (!d.called) c[kindOf(d.tile)]++;
     for (const m of p.melds) for (const t of m.tiles) c[kindOf(t)]++;
+    c[30] += p.kita.length;
     if (s !== seat) {
       for (const t of p.hand) if (!isOpaque(t)) c[kindOf(t)]++;
       if (p.drawn !== null && !isOpaque(p.drawn)) c[kindOf(p.drawn)]++;
@@ -91,6 +92,7 @@ export function chooseAction(g: Game, seat: number, opts: Options): Action {
   if (opts.ready) return { type: 'ready' };
   if (opts.tsumo) return { type: 'tsumo' };
   if (opts.ron) return { type: 'ron' };
+  if (opts.nuki?.length) return { type: 'nuki', tile: opts.nuki[0] };
 
   const p = g.players[seat];
 
@@ -150,9 +152,9 @@ export function chooseAction(g: Game, seat: number, opts: Options): Action {
   const full = g.fullHand(seat);
   const visible = visibleCounts(g, seat);
   const counts = countsOfIds(full);
-  const threats = [0, 1, 2, 3].filter((s) => s !== seat).map((s) => ({ s, lv: threatLevel(g, s) })).filter((x) => x.lv > 0);
+  const threats = g.seats().filter((s) => s !== seat).map((s) => ({ s, lv: threatLevel(g, s) })).filter((x) => x.lv > 0);
   const curShanten = shanten(counts, p.melds.length);
-  const doraKinds = g.doraIndicators().map((t) => doraFromIndicator(kindOf(t)));
+  const doraKinds = g.doraIndicators().map((t) => doraFromIndicator(kindOf(t), g.sanma));
 
   type Cand = { tile: TileId; sh: number; uke: number; dng: number; score: number };
   const seen = new Map<Kind, Cand>();

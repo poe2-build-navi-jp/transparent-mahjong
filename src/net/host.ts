@@ -96,7 +96,7 @@ export class GameHost {
     } else {
       this.deadline = null;
     }
-    for (let s = 0; s < 4; s++) this.sendTo(s);
+    for (let s = 0; s < g.n; s++) this.sendTo(s);
 
     // CPU の行動（鳴き判断は即時寄り、打牌は少し間を置く）
     const delay = this.opts.cpuDelay ?? 650;

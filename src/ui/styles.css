@@ -24,8 +24,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* ======================================================== 画面（タイトル等） */
 .screen {
   position: absolute; inset: 0; overflow-y: auto;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 24px 16px;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 24px 16px; overflow-x: hidden;
   background:
     radial-gradient(ellipse at 50% 35%, rgba(46, 130, 120, .55), transparent 60%),
     radial-gradient(ellipse at 80% 100%, rgba(233, 196, 106, .12), transparent 50%),
@@ -43,6 +43,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   backdrop-filter: blur(8px);
 }
 .card.wide { width: min(640px, 100%); }
+.screen::before, .screen::after { content: ''; flex: 1 0 0; }
+.card { max-width: 100%; overflow-wrap: anywhere; }
 .card h2 { margin: 0 0 4px; font-size: 20px; color: var(--gold); text-align: center; }
 .card h3 { margin: 8px 0 0; font-size: 15px; color: var(--gold); }
 .card p, .card li { line-height: 1.7; font-size: 14px; color: #dfe9e6; }
@@ -261,7 +263,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .plate.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 16px rgba(233,196,106,.5); }
 .plate.p0 { left: 16px; top: 536px; }
-.plate.p1 { right: 16px; top: 214px; }
+.plate.p1 { right: 16px; top: 290px; }
 .plate.p2 { left: 870px; top: 8px; }
 .plate.p3 { left: 16px; top: 96px; }
 .avatar {
@@ -407,3 +409,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .deco { opacity: .3 !important; }
   .deco .tile { transform: scale(.75); }
 }
+
+.meld.kita { position: relative; padding-top: 12px; }
+.klabel { position: absolute; left: 0; top: -2px; font-size: 10px; color: var(--gold); white-space: nowrap; }
+.layer.r2 .klabel { transform: rotate(180deg); }
+.credit { position: relative; z-index: 2; margin-top: 14px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.7; }
+.credit a { color: var(--gold); }
+.seg.three { grid-template-columns: 1fr 1fr 1fr; }
+.audio-row { display: flex; gap: 8px; justify-content: center; }
+.audio-row .toggle { font-size: 13px; padding: 7px 16px; }

@@ -4,6 +4,7 @@ import {
   countsOfIds, isOpaque, kindOf, WIND_NAMES, type Kind, type TileId,
 } from '../engine/tiles';
 import type { Meld } from '../engine/types';
+import { audio, type VoiceKind } from './audio';
 import { tileFaceSvg } from './tileSvg';
 
 type Size = 'hand' | 'pond' | 'opp' | 'meld' | 'small' | 'dora';
@@ -28,7 +29,7 @@ export function tileHtml(id: TileId | null, o: TileOpts): string {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 const CALL_TEXT: Record<string, string> = {
-  pon: 'ポン', chi: 'チー', kan: 'カン', riichi: 'リーチ', ron: 'ロン', tsumo: 'ツモ', draw: '流局',
+  pon: 'ポン', chi: 'チー', kan: 'カン', riichi: 'リーチ', ron: 'ロン', tsumo: 'ツモ', draw: '流局', nuki: '北',
 };
 
 interface Settings {
@@ -79,6 +80,7 @@ export class TableUI {
     this.stage.addEventListener('mouseover', this.onHover);
     this.timerHandle = setInterval(() => this.tickTimer(), 250);
     this.stage.innerHTML = '<div class="loading">配牌中…</div>';
+    audio.startBgm();
   }
 
   destroy() {
@@ -109,6 +111,7 @@ export class TableUI {
       this.selected = null;
     }
     this.render(prev);
+    if (prev && v.players.some((p, i) => p.discards.length > (prev.players[i]?.discards.length ?? 0))) audio.click();
     if (v.event && v.event.seq !== this.lastEventSeq) {
       if (this.lastEventSeq !== 0 || prev) this.showCall(v);
       this.lastEventSeq = v.event.seq;
@@ -130,7 +133,7 @@ export class TableUI {
     const me = v.players[v.you];
     if (this.settings.autoWin && (o.ron || o.tsumo)) act = { type: o.ron ? 'ron' : 'tsumo' };
     else if (o.pass && !o.ron && this.settings.noCalls) act = { type: 'pass' };
-    else if (o.discard && !o.tsumo && !o.ankan && !o.kakan && me.drawn !== undefined && me.drawn !== null) {
+    else if (o.discard && !o.tsumo && !o.ankan && !o.kakan && !o.nuki && me.drawn !== undefined && me.drawn !== null) {
       if (me.riichi || (this.settings.autoDiscard && !o.riichi)) {
         act = { type: 'discard', tile: me.drawn };
         delay = me.riichi ? 600 : 400;
@@ -148,7 +151,15 @@ export class TableUI {
   // ------------------------------------------------------------ 描画
 
   private rel(seat: number): number {
-    return (seat - this.view!.you + 4) % 4;
+    const n = this.view!.players.length;
+    const r = (seat - this.view!.you + n) % n;
+    // 三麻は対面がいない: 下家=右、上家=左
+    return n === 3 && r === 2 ? 3 : r;
+  }
+
+  private wind(v: GameView, seat: number): string {
+    const n = v.players.length;
+    return WIND_NAMES[(seat - v.roundNum + n) % n];
   }
 
   private render(prev: GameView | null) {
@@ -178,7 +189,7 @@ export class TableUI {
     const round = `${WIND_NAMES[v.roundWind]}${v.roundNum + 1}局`;
     const seats = v.players.map((p) => {
       const r = this.rel(p.seat);
-      const wind = WIND_NAMES[(p.seat - v.roundNum + 4) % 4];
+      const wind = this.wind(v, p.seat);
       const active = (v.phase === 'turn' || v.phase === 'claims') && v.current === p.seat;
       return `<div class="cseat r${r} ${active ? 'active' : ''} ${wind === '東' ? 'dealer' : ''}">
         <span class="cwind">${wind}</span><span class="cscore">${p.score}</span></div>`;
@@ -208,15 +219,17 @@ export class TableUI {
     if (r !== 0) {
       const tiles = p.hand.map((t) => tileHtml(t, { size: 'opp' })).join('');
       const drawn = p.drawn !== undefined ? `<span class="gap"></span>${tileHtml(p.drawn, { size: 'opp', cls: 'drawn' })}` : '';
-      hand = `<div class="ohand">${tiles}${drawn}${this.meldsHtml(p.melds, p.seat, 'opp')}</div>`;
+      hand = `<div class="ohand">${tiles}${drawn}${this.meldsHtml(p.melds, p.seat, 'opp', p.kita)}</div>`;
     }
     return `<div class="layer r${r}">${pond}${stick}${hand}</div>`;
   }
 
-  private meldsHtml(melds: Meld[], seat: number, size: Size): string {
-    if (!melds.length) return '';
+  private meldsHtml(melds: Meld[], seat: number, size: Size, kita: TileId[] = []): string {
+    if (!melds.length && !kita.length) return '';
+    const n = this.view!.players.length;
     const out = melds.map((m) => {
-      const fromRel = m.from === undefined ? 0 : (m.from - seat + 4) % 4; // 1=下家 2=対面 3=上家
+      let fromRel = m.from === undefined ? 0 : (m.from - seat + n) % n; // 1=下家 2=対面 3=上家
+      if (n === 3 && fromRel === 2) fromRel = 3;
       let tiles = m.tiles.filter((t) => t !== m.called);
       const html: string[] = [];
       if (m.type === 'ankan') {
@@ -240,13 +253,14 @@ export class TableUI {
       seq.splice(calledIdx, 0, tileHtml(m.called!, { size, side: true }));
       return `<div class="meld">${seq.join('')}</div>`;
     });
+    if (kita.length) out.push(`<div class="meld kita">${kita.map((t) => tileHtml(t, { size })).join('')}<span class="klabel">抜きドラ</span></div>`);
     return `<div class="melds">${out.join('')}</div>`;
   }
 
   private plates(v: GameView): string {
     return v.players.map((p) => {
       const r = this.rel(p.seat);
-      const wind = WIND_NAMES[(p.seat - v.roundNum + 4) % 4];
+      const wind = this.wind(v, p.seat);
       const badge = !p.connected ? '<span class="badge off">切断・代打ち</span>' : p.isCpu ? '<span class="badge">CPU</span>' : '';
       const active = (v.phase === 'turn' || v.phase === 'claims') && v.current === p.seat;
       return `<div class="plate p${r} ${active ? 'active' : ''}">
@@ -270,7 +284,9 @@ export class TableUI {
     return `<div class="menu">
       <button class="exit" data-exit="1">退出</button>
       <div class="mlabel">${esc(this.label)}</div>
-      <div class="toggles">${t('autoWin', '自動和了')}${t('noCalls', '鳴きなし')}${t('autoDiscard', 'ツモ切り')}</div>
+      <div class="toggles">${t('autoWin', '自動和了')}${t('noCalls', '鳴きなし')}${t('autoDiscard', 'ツモ切り')}
+        <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
+        <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button></div>
     </div>`;
   }
 
@@ -300,6 +316,7 @@ export class TableUI {
       if (p.drawn !== undefined && p.drawn !== null && kindOf(p.drawn) === k) seen++;
       for (const d of p.discards) if (!d.called && kindOf(d.tile) === k) seen++;
       for (const m of p.melds) for (const t of m.tiles) if (kindOf(t) === k) seen++;
+      if (k === 30) seen += p.kita.length;
     }
     for (const t of v.doraIndicators) if (kindOf(t) === k) seen++;
     return Math.max(0, 4 - seen);
@@ -324,7 +341,7 @@ export class TableUI {
     };
     const hand = (me.hand as TileId[]).map((t) => tile(t)).join('');
     const drawn = me.drawn !== undefined && me.drawn !== null ? `<span class="gap"></span>${tile(me.drawn, 'drawn')}` : '';
-    return `<div class="myhand">${hand}${drawn}</div><div class="mymelds">${this.meldsHtml(me.melds, me.seat, 'meld')}</div>`;
+    return `<div class="myhand">${hand}${drawn}</div><div class="mymelds">${this.meldsHtml(me.melds, me.seat, 'meld', me.kita)}</div>`;
   }
 
   private actionsHtml(v: GameView): string {
@@ -352,6 +369,7 @@ export class TableUI {
       if (o.pon) b.push(btn('pon', 'ポン', 'blue'));
       if (o.chi) b.push(btn('chi', 'チー', 'green'));
       if (o.minkan || o.ankan || o.kakan) b.push(btn('kan', 'カン', 'purple'));
+      if (o.nuki) b.push(btn('nuki', '北抜き', 'green'));
       if (o.pass) b.push(btn('pass', 'スキップ', 'gray'));
     }
     return `<div class="actions">${b.join('')}</div>`;
@@ -392,7 +410,7 @@ export class TableUI {
         const summary = res.yakuman ? res.limitName : `${res.fu}符 ${res.han}翻${res.limitName ? ' ' + res.limitName : ''}`;
         return `<div class="win">
           <div class="wtitle2">${name(w.seat)} <span class="how">${w.from === null ? 'ツモ' : `ロン ← ${name(w.from)}`}</span></div>
-          <div class="whand">${hand.map((t) => tileHtml(t, { size: 'meld' })).join('')}<span class="gap"></span>${tileHtml(w.winTile, { size: 'meld', cls: 'hl' })}${this.meldsHtml(w.melds, w.seat, 'small')}</div>
+          <div class="whand">${hand.map((t) => tileHtml(t, { size: 'meld' })).join('')}<span class="gap"></span>${tileHtml(w.winTile, { size: 'meld', cls: 'hl' })}${this.meldsHtml(w.melds, w.seat, 'small', w.kita)}</div>
           <div class="wdora"><span>ドラ</span>${r.doraIndicators.map((t) => tileHtml(t, { size: 'small' })).join('')}
             ${r.uraIndicators.length ? `<span>裏ドラ</span>${r.uraIndicators.map((t) => tileHtml(t, { size: 'small' })).join('')}` : ''}</div>
           <ul class="yaku">${yaku}</ul>
@@ -408,7 +426,7 @@ export class TableUI {
     }
     const scores = v.players.map((p) => {
       const d = r.deltas[p.seat];
-      return `<div class="srow"><span>${WIND_NAMES[(p.seat - v.roundNum + 4) % 4]}</span><span class="sname">${esc(p.name)}</span><span class="sval">${r.scores[p.seat].toLocaleString()}</span><span class="delta ${d > 0 ? 'plus' : d < 0 ? 'minus' : ''}">${d > 0 ? '+' : ''}${d ? d.toLocaleString() : ''}</span></div>`;
+      return `<div class="srow"><span>${this.wind(v, p.seat)}</span><span class="sname">${esc(p.name)}</span><span class="sval">${r.scores[p.seat].toLocaleString()}</span><span class="delta ${d > 0 ? 'plus' : d < 0 ? 'minus' : ''}">${d > 0 ? '+' : ''}${d ? d.toLocaleString() : ''}</span></div>`;
     }).join('');
     const ready = v.options?.ready ? '<button class="abtn ok" data-act="ready">OK</button>' : '<div class="waiting">他のプレイヤーを待っています…</div>';
     return `<div class="overlay"><div class="panel result">${body}<div class="scores">${scores}</div>${ready}</div></div>`;
@@ -428,6 +446,7 @@ export class TableUI {
     const e = v.event!;
     const text = CALL_TEXT[e.kind];
     if (!text) return;
+    if (e.kind !== 'draw' && e.kind !== 'nuki') audio.voice(e.kind as VoiceKind);
     const old = this.stage.querySelector('.callout');
     old?.remove();
     const el = document.createElement('div');
@@ -471,6 +490,11 @@ export class TableUI {
     const v = this.view;
     if (target.closest('[data-exit]')) {
       if (v?.phase === 'gameEnd' || confirm('対局を退出しますか？')) this.onExit();
+      return;
+    }
+    const au = target.closest('[data-audio]') as HTMLElement | null;
+    if (au) {
+      au.classList.toggle('on', audio.toggle(au.dataset.audio as 'bgm' | 'voice'));
       return;
     }
     const tg = target.closest('[data-toggle]') as HTMLElement | null;
@@ -521,6 +545,9 @@ export class TableUI {
         return;
       case 'pon':
         this.send({ type: 'pon', tiles: o.pon![0] });
+        return;
+      case 'nuki':
+        this.send({ type: 'nuki', tile: o.nuki![0] });
         return;
       case 'chi':
         if (o.chi!.length === 1) this.send({ type: 'chi', tiles: o.chi![0] });

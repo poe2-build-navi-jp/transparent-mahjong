@@ -169,11 +169,12 @@ export class RoomHost {
   }
 
   /** 空席は CPU で埋めて開始。席順はランダム */
-  start(length: 'tonpu' | 'hanchan') {
+  start(length: 'tonpu' | 'hanchan', count: 3 | 4 = 4) {
+    this.guests = this.guests.slice(0, count - 1);
     const people = [{ name: this.name, guest: null as Guest | null }, ...this.guests.map((g) => ({ name: g.name, guest: g as Guest | null }))];
     const cpuNames = ['CPU 白鷺', 'CPU 烏', 'CPU 鷹'];
-    while (people.length < 4) people.push({ name: cpuNames[people.length - 1] ?? 'CPU', guest: null });
-    const order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+    while (people.length < count) people.push({ name: cpuNames[people.length - 1] ?? 'CPU', guest: null });
+    const order = people.map((_, i) => i).sort(() => Math.random() - 0.5);
     const seats = order.map((i) => people[i]);
     const cpu = seats.map((p, i) => order[i] !== 0 && p.guest === null);
     const links = seats.map((p, i) => {
