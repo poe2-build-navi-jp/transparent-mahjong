@@ -419,3 +419,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .seg.three { grid-template-columns: 1fr 1fr 1fr; }
 .audio-row { display: flex; gap: 8px; justify-content: center; }
 .audio-row .toggle { font-size: 13px; padding: 7px 16px; }
+
+/* 手牌の並べ替え */
+.myhand.free .tile { touch-action: none; cursor: grab; }
+.myhand .tile.dragging { transition: none !important; z-index: 20; opacity: .9; cursor: grabbing; filter: drop-shadow(0 8px 10px rgba(0,0,0,.5)); }

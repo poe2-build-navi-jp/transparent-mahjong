@@ -815,7 +815,11 @@ export class Game {
       const showAll = self || this.phase === 'gameEnd';
       let hand: (TileId | null)[];
       let drawn: TileId | null | undefined;
-      if (showAll) {
+      if (self) {
+        // 自分の手牌は配牌・ツモ順のまま送る（並べ替えは各自の画面で行う）
+        hand = [...p.hand];
+        drawn = p.drawn ?? undefined;
+      } else if (showAll) {
         hand = sortTiles(p.hand);
         drawn = p.drawn ?? undefined;
       } else {
