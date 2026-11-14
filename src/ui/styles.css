@@ -12,7 +12,7 @@
 * { box-sizing: border-box; }
 html, body {
   margin: 0; height: 100%; overflow: hidden;
-  background: #071417;
+  background: #04100f;
   color: var(--ink);
   font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -176,7 +176,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tile.hl { outline: 2px solid var(--gold); outline-offset: 1px; }
 
 /* ======================================================== ステージ */
-.stage-wrap { position: fixed; inset: 0; overflow: hidden; overflow: clip; background: #04100f; }
+.stage-wrap { position: fixed; inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); overflow: hidden; overflow: clip; background: #04100f; }
 .stage {
   position: absolute; left: 50%; top: 50%;
   width: 1280px; height: 720px; transform-origin: 50% 50%;
@@ -287,7 +287,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .menu { position: absolute; right: 16px; top: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 20; }
 .menu .exit { padding: 7px 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.45); font-size: 13px; }
 .mlabel { font-size: 12px; color: var(--muted); padding: 0 6px; }
-.toggles { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.toggles { display: grid; grid-template-columns: repeat(2, auto); gap: 5px; justify-content: end; }
+.menu .toggle { padding: 6px 9px; font-size: 11px; text-align: center; }
 .toggle { padding: 7px 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.15); background: rgba(0,0,0,.45); font-size: 12px; color: var(--muted); }
 .toggle.on { color: #2b1d05; background: var(--gold); border-color: var(--gold); font-weight: 700; }
 .layer, .plate { z-index: 1; }
@@ -423,3 +424,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* 手牌の並べ替え */
 .myhand.free .tile { touch-action: none; cursor: grab; }
 .myhand .tile.dragging { transition: none !important; z-index: 20; opacity: .9; cursor: grabbing; filter: drop-shadow(0 8px 10px rgba(0,0,0,.5)); }
+
+.screen { padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.credit .plink { display: inline-block; margin-top: 4px; }

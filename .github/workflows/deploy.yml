@@ -26,6 +26,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          # 対戦サーバーの URL（リポジトリの Settings → Secrets and variables → Actions → Variables の SERVER_URL）
+          # 未設定ならオンライン対戦は P2P 方式で動く
+          VITE_SERVER_URL: ${{ vars.SERVER_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

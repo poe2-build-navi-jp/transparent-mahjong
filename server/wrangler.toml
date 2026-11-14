@@ -1,0 +1,17 @@
+name = "transparent-mahjong"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# 無料プランで使える SQLite バックエンドの Durable Object
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[vars]
+# 接続を許可するオリジン（カンマ区切り）。空なら全て許可。
+# 例: "https://poe2-build-navi-jp.github.io,capacitor://localhost,https://localhost"
+ALLOWED_ORIGINS = ""

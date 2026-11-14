@@ -5,6 +5,7 @@ import {
 } from '../engine/tiles';
 import type { Meld } from '../engine/types';
 import { audio, type VoiceKind } from './audio';
+import { haptics } from './haptics';
 import { tileFaceSvg } from './tileSvg';
 
 type Size = 'hand' | 'pond' | 'opp' | 'meld' | 'small' | 'dora';
@@ -108,8 +109,9 @@ export class TableUI {
   }
 
   private fit = () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    // ノッチ・ホームバーを除いた領域に収める
+    const w = this.wrap.clientWidth || window.innerWidth;
+    const h = this.wrap.clientHeight || window.innerHeight;
     const portrait = h > w * 1.05;
     const scale = portrait ? Math.min(h / 1280, w / 720) : Math.min(w / 1280, h / 720);
     this.stage.style.transform = portrait
@@ -305,7 +307,8 @@ export class TableUI {
       <div class="mlabel">${esc(this.label)}</div>
       <div class="toggles">${t('autoWin', '自動和了')}${t('noCalls', '鳴きなし')}${t('autoDiscard', 'ツモ切り')}${t('autoSort', '自動理牌')}
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
-        <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button></div>
+        <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button>
+        <button class="toggle ${haptics.enabled ? 'on' : ''}" data-vibe="1">振動</button></div>
     </div>`;
   }
 
@@ -485,6 +488,7 @@ export class TableUI {
     const text = CALL_TEXT[e.kind];
     if (!text) return;
     if (e.kind !== 'draw' && e.kind !== 'nuki') audio.voice(e.kind as VoiceKind);
+    haptics.tap(e.kind === 'ron' || e.kind === 'tsumo' ? 'heavy' : 'medium');
     const old = this.stage.querySelector('.callout');
     old?.remove();
     const el = document.createElement('div');
@@ -592,6 +596,8 @@ export class TableUI {
       if (v?.phase === 'gameEnd' || confirm('対局を退出しますか？')) this.onExit();
       return;
     }
+    const vb = target.closest('[data-vibe]') as HTMLElement | null;
+    if (vb) { vb.classList.toggle('on', haptics.toggle()); return; }
     const au = target.closest('[data-audio]') as HTMLElement | null;
     if (au) {
       au.classList.toggle('on', audio.toggle(au.dataset.audio as 'bgm' | 'voice'));
@@ -625,6 +631,7 @@ export class TableUI {
         this.render(v);
         return;
       }
+      haptics.tap('light');
       this.send({ type: 'discard', tile: id, riichi: this.mode === 'riichi' });
       this.mode = 'normal';
       this.selected = null;
