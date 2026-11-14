@@ -1,4 +1,5 @@
 import type { Action, GameView } from '../engine/game';
+import { DEFAULT_RULES, sanitizeRules, type Rules } from '../engine/rules';
 import { myToken, type Member } from './online';
 
 /**
@@ -29,7 +30,7 @@ export async function detectServer(): Promise<void> {
 }
 
 type ServerMsg =
-  | { t: 'lobby'; code: string; members: Member[]; youAreHost: boolean }
+  | { t: 'lobby'; code: string; members: Member[]; youAreHost: boolean; rules?: Rules }
   | { t: 'view'; v: GameView }
   | { t: 'error'; msg: string; fatal?: boolean }
   | { t: 'pong' };
@@ -47,7 +48,7 @@ export class WsRoom {
   private retries = 0;
   private ping: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  onLobby: (members: Member[], youAreHost: boolean) => void = () => {};
+  onLobby: (members: Member[], youAreHost: boolean, rules: Rules) => void = () => {};
   onView: (v: GameView) => void = () => {};
   onError: (msg: string, fatal: boolean) => void = () => {};
   onClosed: () => void = () => {};
@@ -98,7 +99,7 @@ export class WsRoom {
       }
       if (msg.t === 'pong') return;
       if (this.ready) { this.ready.resolve(); this.ready = null; }
-      if (msg.t === 'lobby') this.onLobby(msg.members, msg.youAreHost);
+      if (msg.t === 'lobby') this.onLobby(msg.members, msg.youAreHost, sanitizeRules(msg.rules ?? DEFAULT_RULES));
       else if (msg.t === 'view') this.onView(msg.v);
     };
     ws.onclose = () => {
@@ -128,8 +129,13 @@ export class WsRoom {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  start(length: 'tonpu' | 'hanchan', count: 3 | 4) {
-    this.send({ t: 'start', length, count });
+  /** ホストのみ: ルールを変更（参加者の画面にも反映される） */
+  setRules(rules: Rules) {
+    this.send({ t: 'rules', rules });
+  }
+
+  start(rules: Rules) {
+    this.send({ t: 'start', rules, length: rules.length, count: rules.count });
   }
 
   act(a: Action) {

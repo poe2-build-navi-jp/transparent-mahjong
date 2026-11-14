@@ -7,6 +7,7 @@ import type { Meld } from '../engine/types';
 import { audio, type VoiceKind } from './audio';
 import { haptics } from './haptics';
 import { tileFaceSvg } from './tileSvg';
+import { isAkaId } from '../engine/rules';
 
 type Size = 'hand' | 'pond' | 'opp' | 'meld' | 'small' | 'dora';
 
@@ -17,13 +18,19 @@ interface TileOpts {
   attrs?: string;
 }
 
+let akaOn = false;
+/** 赤ドラありの対局か（牌の描き分けに使う） */
+export function setAka(on: boolean) { akaOn = on; }
+
 export function tileHtml(id: TileId | null, o: TileOpts): string {
   const cls = ['tile', `t-${o.size}`];
   if (id === null || id < 0) cls.push('back');
   else cls.push(isOpaque(id) ? 'opaque' : 'clear');
   if (o.side) cls.push('side');
   if (o.cls) cls.push(o.cls);
-  const face = id === null || id < 0 ? '' : `<div class="face">${tileFaceSvg(kindOf(id))}</div>`;
+  const red = akaOn && id !== null && isAkaId(id);
+  if (red) cls.push('aka');
+  const face = id === null || id < 0 ? '' : `<div class="face">${tileFaceSvg(kindOf(id), red)}</div>`;
   return `<div class="${cls.join(' ')}" ${o.attrs ?? ''}>${face}</div>`;
 }
 
@@ -122,6 +129,7 @@ export class TableUI {
   update(v: GameView) {
     const prev = this.view;
     this.view = v;
+    setAka(v.aka);
     this.localDeadline = v.deadline === null ? null : Date.now() + v.deadline;
     // 選択状態のリセット
     const myTurnChanged = !prev || prev.phase !== v.phase || prev.current !== v.current || !sameOpts(prev.options, v.options);
@@ -507,10 +515,15 @@ export class TableUI {
       el.classList.remove('show');
       return;
     }
-    const sec = Math.max(0, Math.ceil((this.localDeadline - Date.now()) / 1000));
-    el.textContent = String(sec);
+    const remain = Math.max(0, this.localDeadline - Date.now());
+    const bank = v.bank ?? 0;
+    const base = remain - bank;
+    // 考慮時間中は「残り考慮時間 + 持ち時間」、超えたら持ち時間を減らしていく
+    if (base > 0 && bank > 0) el.innerHTML = `${Math.ceil(base / 1000)}<small>+${Math.ceil(bank / 1000)}</small>`;
+    else el.textContent = String(Math.ceil(remain / 1000));
     el.classList.add('show');
-    el.classList.toggle('urgent', sec <= 5);
+    el.classList.toggle('bank', base <= 0 && bank > 0);
+    el.classList.toggle('urgent', remain <= 5000);
   }
 
   // ------------------------------------------------------------ 入力

@@ -7,28 +7,37 @@ export interface SeatLink {
 }
 
 export interface HostOptions {
-  /** 人間プレイヤーに持ち時間を設けるか（オンライン用） */
+  /** 人間プレイヤーにルールの考慮時間・持ち時間を適用するか（オンライン用） */
   timed: boolean;
   cpuDelay?: number;
 }
 
-const TIME_TURN = 20000;
-const TIME_CLAIM = 8000;
+/** 局の結果画面で待つ時間 */
 const TIME_READY = 20000;
 
 /**
  * 権威サーバー役。ゲーム状態を持ち、各席へ見せてよい情報だけを送る。
- * ローカル（CPU対戦）でもオンライン（ホスト端末上）でも同じものを使う。
+ * ローカル（CPU対戦）でもオンライン（サーバー・ホスト端末上）でも同じものを使う。
+ *
+ * 時間の管理: 1手ごとに「考慮時間」があり、それを超えた分は各自の「持ち時間」から減る。
+ * 両方使い切ると自動でツモ切り（鳴きはスキップ）になる。
  */
 export class GameHost {
   game: Game;
   private timers: ReturnType<typeof setTimeout>[] = [];
-  private deadline: number | null = null;
-  private deadlineKey = '';
+  private decisionKey = '';
+  private decisionStart = 0;
+  /** 各席の残り持ち時間（ミリ秒） */
+  private bank: number[];
   private stopped = false;
 
   constructor(config: GameConfig, private links: SeatLink[], private opts: HostOptions) {
     this.game = new Game(config);
+    this.bank = this.game.players.map(() => this.game.rules.bankSec * 1000);
+  }
+
+  private get timed(): boolean {
+    return this.opts.timed && this.game.rules.thinkSec > 0;
   }
 
   start() {
@@ -57,8 +66,18 @@ export class GameHost {
 
   action(seat: number, a: Action) {
     if (this.stopped) return;
-    if (this.game.act(seat, a)) this.update();
-    else this.sendTo(seat);
+    const g = this.game;
+    const wasPending = this.timed && g.phase !== 'roundEnd' && !g.players[seat].isCpu && g.pendingSeats().includes(seat);
+    if (g.act(seat, a)) {
+      // 考慮時間を超えた分を持ち時間から引く
+      if (wasPending) {
+        const over = Date.now() - this.decisionStart - g.rules.thinkSec * 1000;
+        if (over > 0) this.bank[seat] = Math.max(0, this.bank[seat] - over);
+      }
+      this.update();
+    } else {
+      this.sendTo(seat);
+    }
   }
 
   private clearTimers() {
@@ -66,8 +85,19 @@ export class GameHost {
     this.timers = [];
   }
 
+  /** その席の締め切り時刻（なければ null） */
+  private deadlineOf(seat: number): number | null {
+    const g = this.game;
+    if (!this.timed || g.players[seat].isCpu || !g.pendingSeats().includes(seat)) return null;
+    if (g.phase === 'roundEnd') return this.decisionStart + TIME_READY;
+    if (g.phase === 'gameEnd') return null;
+    return this.decisionStart + g.rules.thinkSec * 1000 + this.bank[seat];
+  }
+
   private sendTo(seat: number) {
-    this.links[seat]?.send?.(this.game.viewFor(seat, this.deadline === null ? null : this.deadline - Date.now()));
+    const dl = this.deadlineOf(seat);
+    const bank = dl === null || this.game.phase === 'roundEnd' ? null : this.bank[seat];
+    this.links[seat]?.send?.(this.game.viewFor(seat, dl === null ? null : dl - Date.now(), bank));
   }
 
   private update() {
@@ -75,26 +105,23 @@ export class GameHost {
     this.clearTimers();
     const g = this.game;
     const pending = g.pendingSeats();
-    const humans = pending.filter((s) => !g.players[s].isCpu);
 
-    // 同じ判断場面（CPUが先に応答しただけ等）なら持ち時間を引き継ぐ
+    // 新しい判断場面になったら時計を回し直す（CPUが先に応答しただけなら引き継ぐ）
     const key = `${g.phase}|${g.current}|${g.roundWind}-${g.roundNum}-${g.honba}|` +
-      g.players.map((p) => p.discards.length + p.melds.length * 100).join(',');
-    if (key !== this.deadlineKey) this.deadline = null;
-    this.deadlineKey = key;
-    if (this.opts.timed && humans.length) {
-      const dur = g.phase === 'turn' ? TIME_TURN : g.phase === 'roundEnd' ? TIME_READY : TIME_CLAIM;
-      if (this.deadline === null) this.deadline = Date.now() + dur;
-      const version = g.version;
+      g.players.map((p) => p.discards.length + p.melds.length * 100 + p.kita.length * 10000).join(',');
+    if (key !== this.decisionKey) {
+      this.decisionKey = key;
+      this.decisionStart = Date.now();
+    }
+    const version = g.version;
+    for (const s of pending) {
+      const dl = this.deadlineOf(s);
+      if (dl === null) continue;
       this.timers.push(setTimeout(() => {
-        if (g.version !== version) return;
-        for (const s of g.pendingSeats()) {
-          if (g.players[s].isCpu) continue;
-          this.timeoutAction(s);
-        }
-      }, Math.max(0, this.deadline - Date.now()) + 300));
-    } else {
-      this.deadline = null;
+        if (g.version !== version || this.stopped) return;
+        if (g.phase !== 'roundEnd') this.bank[s] = 0;
+        this.timeoutAction(s);
+      }, Math.max(0, dl - Date.now()) + 300));
     }
     for (let s = 0; s < g.n; s++) this.sendTo(s);
 
@@ -102,7 +129,6 @@ export class GameHost {
     const delay = this.opts.cpuDelay ?? 650;
     for (const s of pending) {
       if (!g.players[s].isCpu) continue;
-      const version = g.version;
       const wait = g.phase === 'turn' ? delay : 250;
       this.timers.push(setTimeout(() => {
         if (g.version !== version || this.stopped) return;

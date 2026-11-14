@@ -84,11 +84,15 @@ function face(k: Kind): string {
   }
 }
 
-export function tileFaceSvg(k: Kind): string {
-  let s = cache.get(k);
+/** red: 赤ドラ（絵柄をすべて赤で描く） */
+export function tileFaceSvg(k: Kind, red = false): string {
+  const key = red ? k + 100 : k;
+  let s = cache.get(key);
   if (!s) {
-    s = `<svg viewBox="0 0 60 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${face(k)}</svg>`;
-    cache.set(k, s);
+    let f = face(k);
+    if (red) f = f.split(INK).join(RED).split(BLUE).join(RED).split(GREEN).join(RED);
+    s = `<svg viewBox="0 0 60 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${f}</svg>`;
+    cache.set(key, s);
   }
   return s;
 }

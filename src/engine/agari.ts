@@ -251,7 +251,9 @@ export function evaluateWin(ctx: WinContext): WinResult | null {
       if (ura) yaku.push({ name: '裏ドラ', han: ura });
       const nuki = ctx.nukiDora ?? 0;
       if (nuki) yaku.push({ name: '抜きドラ', han: nuki });
-      doraTotal += nuki;
+      const aka = ctx.akaDora ?? 0;
+      if (aka) yaku.push({ name: '赤ドラ', han: aka });
+      doraTotal += nuki + aka;
       han += doraTotal;
     }
     const lim = limitOf(han, cand.fu, cand.yakuman);
@@ -293,7 +295,7 @@ function evalRegular(
   // 平和
   const pinfu = closed && ctx.melds.length === 0 && shuntsu.length === 4 && valuePair(pair) === 0 && wait === 'ryanmen';
   if (pinfu) y.push({ name: '平和', han: 1 });
-  if (allKinds.every(isSimple)) y.push({ name: '断幺九', han: 1 });
+  if (allKinds.every(isSimple) && (closed || ctx.kuitan !== false)) y.push({ name: '断幺九', han: 1 });
 
   // 一盃口・二盃口
   if (closed) {
