@@ -219,7 +219,7 @@ export class TableUI {
     if (r !== 0) {
       const tiles = p.hand.map((t) => tileHtml(t, { size: 'opp' })).join('');
       const drawn = p.drawn !== undefined ? `<span class="gap"></span>${tileHtml(p.drawn, { size: 'opp', cls: 'drawn' })}` : '';
-      hand = `<div class="ohand">${tiles}${drawn}${this.meldsHtml(p.melds, p.seat, 'opp', p.kita)}</div>`;
+      hand = `<div class="ohand ${p.melds.length >= 2 ? 'many' : ''}">${tiles}${drawn}${this.meldsHtml(p.melds, p.seat, 'opp', p.kita)}</div>`;
     }
     return `<div class="layer r${r}">${pond}${stick}${hand}</div>`;
   }
