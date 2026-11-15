@@ -24,6 +24,7 @@ new_sqlite_classes = ["Quota"]
 # 例: "https://poe2-build-navi-jp.github.io,capacitor://localhost,https://localhost"
 ALLOWED_ORIGINS = ""
 # 1日あたりの無料オンライン対局数（日本時間0時にリセット）。"0" にすると制限なし
+# ※ REVENUECAT_API_KEY（購入の確認用）を登録するまでは自動的に無制限。アプリ公開時に登録すると有効になる
 FREE_GAMES_PER_DAY = "1"
 # 1つの接続元が1分間に作れるルーム数
 ROOMS_PER_MINUTE = "5"

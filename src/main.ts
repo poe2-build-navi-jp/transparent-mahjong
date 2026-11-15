@@ -150,7 +150,7 @@ async function showQuota() {
   if (!document.body.contains(el)) return;
   if (!q) { el.textContent = 'プレミアム会員について'; return; }
   if (q.premium) el.textContent = 'プレミアム会員：オンライン対戦 無制限';
-  else if (q.remaining === null) el.textContent = 'オンライン対戦：無制限（現在は制限なし）';
+  else if (q.remaining === null) el.textContent = 'オンライン対戦：アプリ公開まで無制限で遊べます';
   else el.textContent = `本日の無料オンライン対局：あと${q.remaining}回（毎日0時に回復）`;
 }
 
@@ -160,7 +160,8 @@ async function premiumScreen(back: () => void = () => titleScreen()) {
   const q = await fetchQuota();
   const ent = billing.entitlements;
   const premium = q?.premium || ent.premium;
-  const limit = q?.limit ?? 1;
+  const limit = q?.plannedLimit ?? q?.limit ?? 1;
+  const unlimitedNow = !!q && q.limit === 0;
   setScreen(`
   <div class="screen rules">
     <div class="card wide premium">
@@ -186,6 +187,7 @@ async function premiumScreen(back: () => void = () => titleScreen()) {
           </ul>
         </div>
       </div>
+      ${unlimitedNow && !premium ? '<div class="pm-on">アプリ公開までは、オンライン対戦も無制限で遊べます。</div>' : ''}
       ${premium ? '<div class="pm-on">プレミアム会員です。いつもありがとうございます！</div>' : ''}
       ${billing.available
         ? `${premium ? '' : '<button class="big primary" id="buy-premium">プレミアムに登録する</button>'}

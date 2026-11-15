@@ -40,6 +40,8 @@ export interface QuotaStatus {
   used: number;
   /** 1日あたりの無料対局数（0 = 無制限） */
   limit: number;
+  /** アプリ公開後の1日あたりの無料対局数 */
+  plannedLimit?: number;
   /** 本日の残り（null = 無制限） */
   remaining: number | null;
 }

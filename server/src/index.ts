@@ -13,6 +13,7 @@
  * - ルーム作成数に上限（1分あたり・接続元ごと）
  *
  * 無料枠: 1日あたりのオンライン対局数（FREE_GAMES_PER_DAY）。プレミアム会員は無制限。
+ * 購入できるようになる（REVENUECAT_API_KEY を登録する）までは無料枠を適用しない。
  */
 import type { Action, GameView } from '../../src/engine/game';
 import { DEFAULT_RULES, sanitizeRules, type Rules } from '../../src/engine/rules';
@@ -447,6 +448,8 @@ interface QuotaStatus {
   used: number;
   /** 0 = 無制限 */
   limit: number;
+  /** アプリ公開後の上限（今は制限していなくても表示用に返す） */
+  plannedLimit: number;
   remaining: number | null;
 }
 
@@ -458,9 +461,19 @@ function todayJst(): string {
 export class Quota implements DurableObject {
   constructor(private state: DurableObjectState, private env: Env) {}
 
-  private get limit(): number {
+  /** アプリ公開後の1日あたりの無料対局数 */
+  private get plannedLimit(): number {
     const n = Number(this.env.FREE_GAMES_PER_DAY ?? '1');
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 1;
+  }
+
+  /**
+   * 今の上限（0 = 無制限）。
+   * 購入できる状態（RevenueCat のキーが登録済み）になるまでは制限しない。
+   * アプリ公開時にキーを登録すると、その時点から自動で制限が始まる。
+   */
+  private get limit(): number {
+    return this.env.REVENUECAT_API_KEY ? this.plannedLimit : 0;
   }
 
   /** RevenueCat でプレミアム（サブスク有効）か確認。結果は10分キャッシュ */
@@ -502,7 +515,7 @@ export class Quota implements DurableObject {
     const premium = await this.isPremium(token);
     const used = (await this.state.storage.get<number>(`u:${token}`)) ?? 0;
     const limit = this.limit;
-    return { premium, used, limit, remaining: premium || limit === 0 ? null : Math.max(0, limit - used) };
+    return { premium, used, limit, plannedLimit: this.plannedLimit, remaining: premium || limit === 0 ? null : Math.max(0, limit - used) };
   }
 
   async fetch(req: Request): Promise<Response> {
