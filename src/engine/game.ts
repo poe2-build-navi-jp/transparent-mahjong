@@ -811,6 +811,25 @@ export class Game {
     this.phase = 'gameEnd';
   }
 
+  /** 保存用に状態を書き出す（サーバーが休止しても対局を再開できるように） */
+  toJSON(): Record<string, unknown> {
+    const o = { ...this } as unknown as Record<string, unknown>;
+    o.claimOptions = [...this.claimOptions];
+    o.claimResponses = [...this.claimResponses];
+    o.readySeats = [...this.readySeats];
+    return o;
+  }
+
+  /** toJSON で書き出した状態から復元する */
+  static fromJSON(o: Record<string, unknown>): Game {
+    const g = Object.create(Game.prototype) as Game;
+    Object.assign(g, o);
+    g.claimOptions = new Map(o.claimOptions as [number, Options][]);
+    g.claimResponses = new Map(o.claimResponses as [number, Action][]);
+    g.readySeats = new Set(o.readySeats as number[]);
+    return g;
+  }
+
   /** 切断などで席をCPUに切り替える */
   setCpu(seat: number, cpu: boolean) {
     this.players[seat].isCpu = cpu;

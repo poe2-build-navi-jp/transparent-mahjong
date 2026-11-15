@@ -448,3 +448,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .rules-summary .rs-title { width: 100%; font-size: 12px; color: var(--gold); font-weight: 700; }
 .rules-summary span { font-size: 12px; padding: 4px 9px; border-radius: 12px; background: rgba(255,255,255,.08); }
 .timer.show { display: flex; align-items: baseline; justify-content: center; white-space: nowrap; }
+
+/* プレミアム */
+.quota-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(233,196,106,.07); color: #dfe9e6; font-size: 12px; text-align: left; }
+.quota-line .pm { flex: none; font-weight: 900; color: #2b1d05; background: var(--gold); padding: 3px 10px; border-radius: 10px; }
+.premium p { margin: 0; }
+.plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plan { padding: 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); }
+.plan.pro { border-color: var(--gold); background: rgba(233,196,106,.1); }
+.plan ul { padding-left: 18px; margin: 6px 0 0; }
+.plan li { font-size: 13px; line-height: 1.6; }
+.pname2 { font-weight: 900; color: var(--gold); }
+.pname2 span { font-size: 12px; color: #fff; margin-left: 4px; }
+.pm-on { text-align: center; color: #7fe0a8; font-weight: 700; }
+.fine { font-size: 11px !important; color: var(--muted) !important; line-height: 1.6 !important; }
+.fine a { color: var(--gold); }
+@media (max-width: 480px) { .plans { grid-template-columns: 1fr; } }
