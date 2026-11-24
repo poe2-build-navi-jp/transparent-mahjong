@@ -165,8 +165,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .t-hand { --w: 76px; --h: 106px; }
 .t-pond { --w: 44px; --h: 60px; }
-.t-opp { --w: 36px; --h: 50px; }
-.ohand.many .t-opp { --w: 30px; --h: 42px; }
+.t-opp { --w: 38px; --h: 53px; }
+.layer.r2 .t-opp { --w: 46px; --h: 63px; }
+.layer.r2 .ohand.many .t-opp { --w: 40px; --h: 55px; }
+.t-view { --w: 58px; --h: 80px; }
 .t-meld { --w: 52px; --h: 72px; }
 .t-small { --w: 30px; --h: 41px; }
 .t-dora { --w: 28px; --h: 38px; }
@@ -244,9 +246,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .rstick i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #d0312d; }
 
 /* 他家の手牌 */
-.ohand { position: absolute; left: 0; right: 0; display: flex; justify-content: center; align-items: flex-end; gap: 1px; }
-.layer.r2 .ohand { top: calc(var(--cy) + 271px); }
-.layer.r1 .ohand, .layer.r3 .ohand { top: calc(var(--cy) + 408px); }
+.ohand, .omelds { position: absolute; left: 0; right: 0; display: flex; justify-content: center; align-items: flex-end; gap: 1px; }
+.ohand { pointer-events: auto; cursor: zoom-in; }
+.layer.r2 .ohand { top: calc(var(--cy) + 264px); }
+.layer.r1 .ohand, .layer.r3 .ohand { top: calc(var(--cy) + 404px); }
+.layer.r1 .omelds, .layer.r3 .omelds { top: calc(var(--cy) + 340px); }
+/* 左右の手牌は自分の手牌とぶつからないよう少し上へ */
+.layer.r1 .ohand, .layer.r1 .omelds { transform: translateX(16px); }
+.layer.r3 .ohand, .layer.r3 .omelds { transform: translateX(-16px); }
+.omelds .melds { gap: 6px; }
 .ohand .gap, .myhand .gap, .whand .gap { width: 10px; flex: none; }
 .ohand .melds { margin-left: 16px; }
 .layer.r2 .ohand .tile .face svg { transform: rotate(180deg); }
@@ -265,7 +273,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .plate.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 16px rgba(233,196,106,.5); }
 .plate.p0 { left: 16px; top: 532px; }
 .plate.p1 { right: 16px; top: 290px; }
-.plate.p2 { left: 950px; top: 8px; }
+.plate.p2 { left: 952px; top: 4px; }
 .plate.p3 { left: 16px; top: 100px; }
 .avatar {
   width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
@@ -464,3 +472,52 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .fine { font-size: 11px !important; color: var(--muted) !important; line-height: 1.6 !important; }
 .fine a { color: var(--gold); }
 @media (max-width: 480px) { .plans { grid-template-columns: 1fr; } }
+
+/* 手牌ビュー（相手の見えている手牌を大きく表示） */
+.viewer { position: absolute; inset: 0; z-index: 35; background: rgba(0, 8, 10, .72); display: flex; align-items: center; justify-content: center; }
+.viewer .vpanel { width: 1220px; max-height: 700px; overflow: hidden; padding: 16px 20px; border-radius: 18px; background: linear-gradient(180deg, rgba(14, 40, 44, .97), rgba(6, 20, 22, .97)); border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.vtitle { display: flex; justify-content: space-between; align-items: baseline; color: var(--gold); font-weight: 900; font-size: 18px; margin-bottom: 8px; }
+.vtitle small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.vrow { padding: 10px 0; border-top: 1px solid rgba(255,255,255,.08); }
+.vhead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.vhead .vname { font-size: 18px; font-weight: 900; }
+.vhead .vwind { color: var(--gold); font-weight: 900; }
+.vhead .vinfo { color: var(--muted); font-size: 13px; }
+.vhead .rbadge { font-size: 12px; }
+.vtiles { display: flex; align-items: flex-end; gap: 3px; flex-wrap: nowrap; }
+.vtiles .melds { margin-left: 18px; }
+.vtiles .vgap { width: 14px; }
+.vnone { color: var(--muted); font-size: 14px; }
+
+/* 設定・戦績・チュートリアル */
+.title-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; }
+.slider { display: grid; grid-template-columns: 9em 1fr 2.5em; align-items: center; gap: 10px; font-size: 13px; color: #dfe9e6; }
+.slider input { width: 100%; accent-color: var(--gold); }
+.slider b { text-align: right; color: var(--gold); }
+.keys { width: 100%; border-collapse: collapse; font-size: 13px; }
+.keys th { text-align: left; white-space: nowrap; color: var(--gold); padding: 4px 12px 4px 0; width: 40%; }
+.keys td { padding: 4px 0; color: #dfe9e6; border-bottom: 1px solid rgba(255,255,255,.06); }
+.statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.statgrid div { display: flex; flex-direction: column; align-items: center; padding: 10px 4px; border-radius: 10px; background: rgba(255,255,255,.05); }
+.statgrid b { font-size: 18px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.statgrid span { font-size: 11px; color: var(--muted); }
+.achs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ach { display: grid; grid-template-columns: 1.4em auto; gap: 0 6px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.04); opacity: .55; }
+.ach.on { opacity: 1; background: rgba(233,196,106,.1); box-shadow: inset 0 0 0 1px var(--line); }
+.amark { grid-row: span 2; color: var(--gold); font-size: 18px; }
+.aname { font-weight: 700; font-size: 13px; }
+.adesc { font-size: 11px; color: var(--muted); }
+.recent { width: 100%; font-size: 12px; border-collapse: collapse; }
+.recent td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.tutorial { text-align: left; }
+.tut-step { color: var(--muted); font-size: 12px; text-align: center; }
+.tut-tiles { display: flex; justify-content: center; gap: 8px; padding: 8px 0 4px; }
+.big:disabled { opacity: .4; cursor: default; }
+@media (max-width: 560px) { .statgrid { grid-template-columns: repeat(2, 1fr); } .achs { grid-template-columns: 1fr; } }
+
+/* 言語切り替え */
+.langsw { position: relative; z-index: 2; display: inline-flex; gap: 4px; padding: 3px; border-radius: 16px; background: rgba(0,0,0,.35); margin-bottom: 14px; align-self: center; }
+.card .langsw { margin-bottom: 0; }
+.langsw button { border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 12px; }
+.langsw button.on { background: var(--gold); color: #2b1d05; }
+.logo-en { position: relative; z-index: 2; margin: -6px 0 6px; font-weight: 900; letter-spacing: .35em; font-size: clamp(12px, 2.4vw, 18px); color: #cfe; text-shadow: 0 0 12px rgba(140,220,255,.5); }

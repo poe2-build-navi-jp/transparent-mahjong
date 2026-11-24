@@ -1,0 +1,63 @@
+{
+  "name": "transparent-mahjong-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "透明麻雀 PC版（Steam）",
+  "main": "main.cjs",
+  "author": "透明麻雀",
+  "scripts": {
+    "prepare-app": "node prepare.cjs",
+    "start": "node prepare.cjs && electron .",
+    "dist": "node prepare.cjs && electron-builder --dir",
+    "dist:win": "node prepare.cjs && electron-builder --dir --win --x64",
+    "dist:linux": "node prepare.cjs && electron-builder --dir --linux --x64",
+    "dist:mac": "node prepare.cjs && electron-builder --dir --mac --universal"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "steamworks.js": "^0.4.0"
+  },
+  "build": {
+    "appId": "jp.transparentmahjong.desktop",
+    "productName": "TransparentMahjong",
+    "executableName": "TransparentMahjong",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "app/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/steamworks.js/**"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png",
+      "category": "Game"
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.board-games"
+    }
+  }
+}

@@ -7,9 +7,10 @@ import type { Meld } from '../engine/types';
 import { audio, type VoiceKind } from './audio';
 import { haptics } from './haptics';
 import { tileFaceSvg } from './tileSvg';
+import { t as tr } from '../i18n';
 import { isAkaId } from '../engine/rules';
 
-type Size = 'hand' | 'pond' | 'opp' | 'meld' | 'small' | 'dora';
+type Size = 'hand' | 'pond' | 'opp' | 'meld' | 'small' | 'dora' | 'view';
 
 interface TileOpts {
   size: Size;
@@ -78,6 +79,13 @@ export class TableUI {
   } | null = null;
   private suppressClick = false;
   private renderPending = false;
+  /** 手牌ビュー（相手の手牌の拡大表示）を開いているか */
+  private viewerOpen = false;
+  /** 戦績・実績の記録係（対局ごとに main から渡される） */
+  tracker: { observe(v: GameView): void } | null = null;
+  private padHandle = 0;
+  private padPrev: boolean[] = [];
+  private padAxisAt = 0;
 
   constructor(
     root: HTMLElement,
@@ -100,12 +108,16 @@ export class TableUI {
     window.addEventListener('pointerup', this.onDragEnd);
     window.addEventListener('pointercancel', this.onDragEnd);
     this.stage.addEventListener('mouseover', this.onHover);
+    window.addEventListener('keydown', this.onKey);
+    this.padHandle = requestAnimationFrame(this.pollPad);
     this.timerHandle = setInterval(() => this.tickTimer(), 250);
-    this.stage.innerHTML = '<div class="loading">配牌中…</div>';
+    this.stage.innerHTML = `<div class="loading">${tr('配牌中…')}</div>`;
     audio.startBgm();
   }
 
   destroy() {
+    window.removeEventListener('keydown', this.onKey);
+    cancelAnimationFrame(this.padHandle);
     window.removeEventListener('resize', this.fit);
     window.removeEventListener('pointermove', this.onDragMove);
     window.removeEventListener('pointerup', this.onDragEnd);
@@ -130,6 +142,7 @@ export class TableUI {
     const prev = this.view;
     this.view = v;
     setAka(v.aka);
+    this.tracker?.observe(v);
     this.localDeadline = v.deadline === null ? null : Date.now() + v.deadline;
     // 選択状態のリセット
     const myTurnChanged = !prev || prev.phase !== v.phase || prev.current !== v.current || !sameOpts(prev.options, v.options);
@@ -208,6 +221,7 @@ export class TableUI {
     else if (v.phase === 'roundEnd' && v.result) overlay = this.resultHtml(v, v.result);
     if (overlay && prev && prev.phase === v.phase) overlay = overlay.replace('class="overlay"', 'class="overlay instant"');
     parts.push(overlay);
+    if (this.viewerOpen && !overlay) parts.push(this.viewerHtml(v));
     const callout = this.stage.querySelector('.callout');
     this.stage.innerHTML = parts.join('');
     if (callout) this.stage.appendChild(callout);
@@ -215,18 +229,18 @@ export class TableUI {
   }
 
   private centerHtml(v: GameView): string {
-    const round = `${WIND_NAMES[v.roundWind]}${v.roundNum + 1}局`;
+    const round = tr('{wind}{n}局', { wind: tr(WIND_NAMES[v.roundWind]), n: v.roundNum + 1 });
     const seats = v.players.map((p) => {
       const r = this.rel(p.seat);
       const wind = this.wind(v, p.seat);
       const active = (v.phase === 'turn' || v.phase === 'claims') && v.current === p.seat;
       return `<div class="cseat r${r} ${active ? 'active' : ''} ${wind === '東' ? 'dealer' : ''}">
-        <span class="cwind">${wind}</span><span class="cscore">${p.score}</span></div>`;
+        <span class="cwind">${tr(wind)}</span><span class="cscore">${p.score}</span></div>`;
     }).join('');
     return `<div class="center">
       <div class="cround">${round}</div>
-      <div class="csub"><span>${v.honba}本場</span><span>供託 ${v.riichiSticks}</span></div>
-      <div class="cwall">残り <b>${v.wallCount}</b></div>
+      <div class="csub"><span>${tr('{n}本場', { n: v.honba })}</span><span>${tr('供託')} ${v.riichiSticks}</span></div>
+      <div class="cwall">${tr('残り')} <b>${v.wallCount}</b></div>
       ${seats}
     </div>`;
   }
@@ -248,7 +262,14 @@ export class TableUI {
     if (r !== 0) {
       const tiles = p.hand.map((t) => tileHtml(t, { size: 'opp' })).join('');
       const drawn = p.drawn !== undefined ? `<span class="gap"></span>${tileHtml(p.drawn, { size: 'opp', cls: 'drawn' })}` : '';
-      hand = `<div class="ohand ${p.melds.length >= 2 ? 'many' : ''}">${tiles}${drawn}${this.meldsHtml(p.melds, p.seat, 'opp', p.kita)}</div>`;
+      const melds = this.meldsHtml(p.melds, p.seat, 'opp', p.kita);
+      if (r === 2) {
+        // 対面は横に余裕があるので副露も同じ列に並べる
+        hand = `<div class="ohand ${p.melds.length + (p.kita.length ? 1 : 0) >= 2 ? 'many' : ''}" data-viewer="1">${tiles}${drawn}${melds}</div>`;
+      } else {
+        // 左右は手牌の列を手牌だけにして牌を大きくし、副露は内側の列に置く
+        hand = `<div class="ohand" data-viewer="1">${tiles}${drawn}</div>${melds ? `<div class="omelds">${melds}</div>` : ''}`;
+      }
     }
     return `<div class="layer r${r}">${pond}${stick}${hand}</div>`;
   }
@@ -282,7 +303,7 @@ export class TableUI {
       seq.splice(calledIdx, 0, tileHtml(m.called!, { size, side: true }));
       return `<div class="meld">${seq.join('')}</div>`;
     });
-    if (kita.length) out.push(`<div class="meld kita">${kita.map((t) => tileHtml(t, { size })).join('')}<span class="klabel">抜きドラ</span></div>`);
+    if (kita.length) out.push(`<div class="meld kita">${kita.map((t) => tileHtml(t, { size })).join('')}<span class="klabel">${tr('抜きドラ')}</span></div>`);
     return `<div class="melds">${out.join('')}</div>`;
   }
 
@@ -290,12 +311,12 @@ export class TableUI {
     return v.players.map((p) => {
       const r = this.rel(p.seat);
       const wind = this.wind(v, p.seat);
-      const badge = !p.connected ? '<span class="badge off">切断・代打ち</span>' : p.isCpu ? '<span class="badge">CPU</span>' : '';
+      const badge = !p.connected ? `<span class="badge off">${tr('切断・代打ち')}</span>` : p.isCpu ? '<span class="badge">CPU</span>' : '';
       const active = (v.phase === 'turn' || v.phase === 'claims') && v.current === p.seat;
       return `<div class="plate p${r} ${active ? 'active' : ''}">
-        <div class="avatar w${wind}">${wind}</div>
-        <div class="pinfo"><div class="pname">${esc(p.name)} ${badge}</div>
-        <div class="pscore">${p.score.toLocaleString()}${p.riichi ? ' <span class="rbadge">立直</span>' : ''}</div></div>
+        <div class="avatar w${wind}">${tr(wind)}</div>
+        <div class="pinfo"><div class="pname">${esc(tr(p.name))} ${badge}</div>
+        <div class="pscore">${p.score.toLocaleString()}${p.riichi ? ` <span class="rbadge">${tr('立直')}</span>` : ''}</div></div>
       </div>`;
     }).join('');
   }
@@ -303,20 +324,21 @@ export class TableUI {
   private doraHtml(v: GameView): string {
     const tiles: string[] = [];
     for (let i = 0; i < 5; i++) tiles.push(tileHtml(v.doraIndicators[i] ?? null, { size: 'dora' }));
-    return `<div class="dora"><div class="dlabel">ドラ表示</div><div class="dtiles">${tiles.join('')}</div></div>`;
+    return `<div class="dora"><div class="dlabel">${tr('ドラ表示')}</div><div class="dtiles">${tiles.join('')}</div></div>`;
   }
 
   private menuHtml(): string {
     const s = this.settings;
-    const t = (key: keyof Settings, label: string) =>
-      `<button class="toggle ${s[key] ? 'on' : ''}" data-toggle="${key}">${label}</button>`;
+    const tg = (key: keyof Settings, label: string) =>
+      `<button class="toggle ${s[key] ? 'on' : ''}" data-toggle="${key}">${tr(label)}</button>`;
     return `<div class="menu">
-      <button class="exit" data-exit="1">退出</button>
+      <button class="exit" data-exit="1">${tr('退出')}</button>
+      <button class="exit viewbtn" data-viewer="1" title="${tr('Tabキーでも開けます')}">${tr('手牌ビュー')}</button>
       <div class="mlabel">${esc(this.label)}</div>
-      <div class="toggles">${t('autoWin', '自動和了')}${t('noCalls', '鳴きなし')}${t('autoDiscard', 'ツモ切り')}${t('autoSort', '自動理牌')}
+      <div class="toggles">${tg('autoWin', '自動和了')}${tg('noCalls', '鳴きなし')}${tg('autoDiscard', 'ツモ切り')}${tg('autoSort', '自動理牌')}
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
-        <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">音声</button>
-        <button class="toggle ${haptics.enabled ? 'on' : ''}" data-vibe="1">振動</button></div>
+        <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">${tr('音声')}</button>
+        <button class="toggle ${haptics.enabled ? 'on' : ''}" data-vibe="1">${tr('振動')}</button></div>
     </div>`;
   }
 
@@ -396,10 +418,10 @@ export class TableUI {
   private actionsHtml(v: GameView): string {
     const o = v.options;
     if (!o || v.phase === 'roundEnd' || v.phase === 'gameEnd') return '<div class="actions"></div>';
-    const btn = (act: string, label: string, cls = '') => `<button class="abtn ${cls}" data-act="${act}">${label}</button>`;
+    const btn = (act: string, label: string, cls = '') => `<button class="abtn ${cls}" data-act="${act}">${tr(label)}</button>`;
     const b: string[] = [];
     if (this.mode === 'riichi') {
-      b.push(`<div class="hint">立直宣言する牌を選んでください</div>`, btn('cancel', 'キャンセル', 'gray'));
+      b.push(`<div class="hint">${tr('立直宣言する牌を選んでください')}</div>`, btn('cancel', 'キャンセル', 'gray'));
     } else if (this.mode === 'chi') {
       for (const [i, tiles] of (o.chi ?? []).entries()) {
         const called = v.lastDiscard!.tile;
@@ -408,8 +430,8 @@ export class TableUI {
       }
       b.push(btn('cancel', '戻る', 'gray'));
     } else if (this.mode === 'kan') {
-      for (const k of o.ankan ?? []) b.push(`<button class="abtn choice" data-ankan="${k}">${tileHtml(k * 4 + 1, { size: 'small' })} 暗槓</button>`);
-      for (const t of o.kakan ?? []) b.push(`<button class="abtn choice" data-kakan="${t}">${tileHtml(t, { size: 'small' })} 加槓</button>`);
+      for (const k of o.ankan ?? []) b.push(`<button class="abtn choice" data-ankan="${k}">${tileHtml(k * 4 + 1, { size: 'small' })} ${tr('暗槓')}</button>`);
+      for (const t of o.kakan ?? []) b.push(`<button class="abtn choice" data-kakan="${t}">${tileHtml(t, { size: 'small' })} ${tr('加槓')}</button>`);
       b.push(btn('cancel', '戻る', 'gray'));
     } else {
       if (o.ron) b.push(btn('ron', 'ロン', 'red'));
@@ -428,13 +450,13 @@ export class TableUI {
     const me = v.players[v.you];
     let waitsHtml = '';
     let waits = v.waits;
-    let title = '待ち';
+    let title = tr('待ち');
     // ホバー中の牌を切った場合の待ち
     if (this.hoverTile !== null && v.options?.discard) {
       const a = this.discardAnalysis(v).get(kindOf(this.hoverTile));
       if (a) {
         waits = a.waits;
-        title = a.shanten === 0 ? '打牌後の待ち' : `${a.shanten}向聴`;
+        title = a.shanten === 0 ? tr('打牌後の待ち') : tr('{n}向聴', { n: a.shanten });
         if (a.shanten > 0) waits = [];
         if (a.shanten > 0) waitsHtml = `<div class="waits"><span class="wtitle">${title}</span></div>`;
       }
@@ -442,51 +464,51 @@ export class TableUI {
     if (waits.length) {
       waitsHtml = `<div class="waits"><span class="wtitle">${title}</span>${waits.map((k) =>
         `<span class="w">${tileHtml(k * 4 + 1, { size: 'small' })}<em>${this.remaining(v, k)}</em></span>`).join('')}
-        ${v.furiten && title === '待ち' ? '<span class="furiten">フリテン</span>' : ''}</div>`;
+        ${v.furiten && title === tr('待ち') ? `<span class="furiten">${tr('フリテン')}</span>` : ''}</div>`;
     }
     void me;
     return `<div class="info">${waitsHtml}</div><div class="timer"></div>`;
   }
 
   private resultHtml(v: GameView, r: RoundResult): string {
-    const name = (s: number) => esc(v.players[s].name);
+    const name = (s: number) => esc(tr(v.players[s].name));
     let body = '';
     if (r.kind === 'win') {
       body = r.wins.map((w) => {
         const hand = w.hand.filter((t) => t !== w.winTile);
         const res = w.result;
-        const yaku = res.yaku.map((y) => `<li><span>${esc(y.name)}</span><b>${y.yakuman ? (y.yakuman > 1 ? 'ダブル役満' : '役満') : y.han + '翻'}</b></li>`).join('');
-        const summary = res.yakuman ? res.limitName : `${res.fu}符 ${res.han}翻${res.limitName ? ' ' + res.limitName : ''}`;
+        const yaku = res.yaku.map((y) => `<li><span>${esc(tr(y.name))}</span><b>${y.yakuman ? (y.yakuman > 1 ? tr('ダブル役満') : tr('役満')) : tr('{n}翻', { n: y.han })}</b></li>`).join('');
+        const summary = res.yakuman ? tr(res.limitName) : `${tr('{n}符', { n: res.fu })} ${tr('{n}翻', { n: res.han })}${res.limitName ? ' ' + tr(res.limitName) : ''}`;
         return `<div class="win">
-          <div class="wtitle2">${name(w.seat)} <span class="how">${w.from === null ? 'ツモ' : `ロン ← ${name(w.from)}`}</span></div>
+          <div class="wtitle2">${name(w.seat)} <span class="how">${w.from === null ? tr('ツモ') : `${tr('ロン')} ← ${name(w.from)}`}</span></div>
           <div class="whand">${hand.map((t) => tileHtml(t, { size: 'meld' })).join('')}<span class="gap"></span>${tileHtml(w.winTile, { size: 'meld', cls: 'hl' })}${this.meldsHtml(w.melds, w.seat, 'small', w.kita)}</div>
-          <div class="wdora"><span>ドラ</span>${r.doraIndicators.map((t) => tileHtml(t, { size: 'small' })).join('')}
-            ${r.uraIndicators.length ? `<span>裏ドラ</span>${r.uraIndicators.map((t) => tileHtml(t, { size: 'small' })).join('')}` : ''}</div>
+          <div class="wdora"><span>${tr('ドラ')}</span>${r.doraIndicators.map((t) => tileHtml(t, { size: 'small' })).join('')}
+            ${r.uraIndicators.length ? `<span>${tr('裏ドラ')}</span>${r.uraIndicators.map((t) => tileHtml(t, { size: 'small' })).join('')}` : ''}</div>
           <ul class="yaku">${yaku}</ul>
-          <div class="wpoints">${summary}<b>${w.points.toLocaleString()}点</b></div>
+          <div class="wpoints">${summary}<b>${tr('{n}点', { n: w.points.toLocaleString() })}</b></div>
         </div>`;
       }).join('');
     } else {
-      body = `<div class="draw"><div class="wtitle2">流局</div>${v.players.map((p) => {
+      body = `<div class="draw"><div class="wtitle2">${tr('流局')}</div>${v.players.map((p) => {
         const hand = r.revealed[p.seat];
-        return `<div class="drow"><span class="dname">${esc(p.name)}</span><span class="${r.tenpai[p.seat] ? 'tp' : 'nt'}">${r.tenpai[p.seat] ? '聴牌' : '不聴'}</span>
+        return `<div class="drow"><span class="dname">${esc(tr(p.name))}</span><span class="${r.tenpai[p.seat] ? 'tp' : 'nt'}">${r.tenpai[p.seat] ? tr('聴牌') : tr('不聴')}</span>
           <span class="dhand">${hand ? hand.map((t) => tileHtml(t, { size: 'small' })).join('') : ''}</span></div>`;
       }).join('')}</div>`;
     }
     const scores = v.players.map((p) => {
       const d = r.deltas[p.seat];
-      return `<div class="srow"><span>${this.wind(v, p.seat)}</span><span class="sname">${esc(p.name)}</span><span class="sval">${r.scores[p.seat].toLocaleString()}</span><span class="delta ${d > 0 ? 'plus' : d < 0 ? 'minus' : ''}">${d > 0 ? '+' : ''}${d ? d.toLocaleString() : ''}</span></div>`;
+      return `<div class="srow"><span>${tr(this.wind(v, p.seat))}</span><span class="sname">${esc(tr(p.name))}</span><span class="sval">${r.scores[p.seat].toLocaleString()}</span><span class="delta ${d > 0 ? 'plus' : d < 0 ? 'minus' : ''}">${d > 0 ? '+' : ''}${d ? d.toLocaleString() : ''}</span></div>`;
     }).join('');
-    const ready = v.options?.ready ? '<button class="abtn ok" data-act="ready">OK</button>' : '<div class="waiting">他のプレイヤーを待っています…</div>';
+    const ready = v.options?.ready ? '<button class="abtn ok" data-act="ready">OK</button>' : `<div class="waiting">${tr('他のプレイヤーを待っています…')}</div>`;
     return `<div class="overlay"><div class="panel result">${body}<div class="scores">${scores}</div>${ready}</div></div>`;
   }
 
   private finalHtml(v: GameView): string {
-    const rows = v.final!.ranking.map((x) => `<div class="frow rank${x.rank} ${x.seat === v.you ? 'me' : ''}"><span class="rk">${x.rank}位</span><span class="fname">${esc(x.name)}</span><span class="fscore">${x.score.toLocaleString()}</span></div>`).join('');
+    const rows = v.final!.ranking.map((x) => `<div class="frow rank${x.rank} ${x.seat === v.you ? 'me' : ''}"><span class="rk">${tr('{n}位', { n: x.rank })}</span><span class="fname">${esc(tr(x.name))}</span><span class="fscore">${x.score.toLocaleString()}</span></div>`).join('');
     const me = v.final!.ranking.find((x) => x.seat === v.you)!;
-    const msg = me.rank === 1 ? '勝利！' : `${me.rank}位`;
-    return `<div class="overlay"><div class="panel final"><div class="ftitle">対局終了</div><div class="fmsg">${msg}</div>${rows}
-      <div class="fbtns"><button class="abtn blue" data-exit="1">タイトルへ</button></div></div></div>`;
+    const msg = me.rank === 1 ? tr('勝利！') : tr('{n}位', { n: me.rank });
+    return `<div class="overlay"><div class="panel final"><div class="ftitle">${tr('対局終了')}</div><div class="fmsg">${msg}</div>${rows}
+      <div class="fbtns"><button class="abtn blue" data-exit="1">${tr('タイトルへ')}</button></div></div></div>`;
   }
 
   // ------------------------------------------------------------ 演出
@@ -501,7 +523,7 @@ export class TableUI {
     old?.remove();
     const el = document.createElement('div');
     el.className = `callout c${this.rel(e.seat)} k-${e.kind}`;
-    el.textContent = text;
+    el.textContent = tr(text);
     this.stage.appendChild(el);
     setTimeout(() => el.remove(), 1300);
   }
@@ -601,12 +623,44 @@ export class TableUI {
     if (this.view) this.render(this.view);
   };
 
+  /** 相手の見えている手牌を大きく並べる */
+  private viewerHtml(v: GameView): string {
+    const n = v.players.length;
+    // 上家 → 対面 → 下家 の順（画面の左・上・右）
+    const order = [3, 2, 1].map((r) => v.players.find((p) => p.seat !== v.you && this.rel(p.seat) === r)).filter((p): p is PlayerView => !!p);
+    const rows = order.map((p) => {
+      const visible = p.hand.filter((t): t is TileId => t !== null);
+      const hidden = p.hand.length - visible.length + (p.drawn === null ? 1 : 0);
+      const drawnVisible = p.drawn !== undefined && p.drawn !== null ? p.drawn : null;
+      const tiles = visible.map((t) => tileHtml(t, { size: 'view' })).join('');
+      const backs = Array.from({ length: hidden }, () => tileHtml(null, { size: 'view' })).join('');
+      const drawn = drawnVisible !== null ? `<span class="vgap"></span>${tileHtml(drawnVisible, { size: 'view' })}` : '';
+      const pos = tr(['', '下家', '対面', '上家'][this.rel(p.seat)]);
+      return `<div class="vrow">
+        <div class="vhead"><span class="vwind">${tr(this.wind(v, p.seat))}</span><span class="vname">${esc(tr(p.name))}</span>
+          <span class="vinfo">${pos}・${tr('{n}点', { n: p.score.toLocaleString() })}・${tr('見えない牌 {n}枚', { n: hidden })}</span>${p.riichi ? `<span class="rbadge">${tr('立直')}</span>` : ''}</div>
+        <div class="vtiles">${tiles}${backs}${drawn}${this.meldsHtml(p.melds, p.seat, 'small', p.kita)}</div>
+      </div>`;
+    }).join('');
+    void n;
+    return `<div class="viewer" data-viewer-close="1"><div class="vpanel">
+      <div class="vtitle">${tr('手牌ビュー')} <small>${tr('透明牌を大きく表示しています。どこかをクリック／Tab・Escキーで閉じる')}</small></div>${rows}</div></div>`;
+  }
+
+  /** 手牌ビューの開閉 */
+  toggleViewer(open = !this.viewerOpen) {
+    this.viewerOpen = open;
+    if (this.view) this.render(this.view);
+  }
+
   private onClick = (e: MouseEvent) => {
     if (this.suppressClick) { this.suppressClick = false; return; }
     const target = e.target as HTMLElement;
     const v = this.view;
+    if (target.closest('[data-viewer-close]')) { this.toggleViewer(false); return; }
+    if (target.closest('[data-viewer]')) { this.toggleViewer(true); return; }
     if (target.closest('[data-exit]')) {
-      if (v?.phase === 'gameEnd' || confirm('対局を退出しますか？')) this.onExit();
+      if (v?.phase === 'gameEnd' || confirm(tr('対局を退出しますか？'))) this.onExit();
       return;
     }
     const vb = target.closest('[data-vibe]') as HTMLElement | null;
@@ -652,6 +706,96 @@ export class TableUI {
     }
   };
 
+  // ------------------------------------------------------------ キーボード・ゲームパッド
+
+  private onKey = (e: KeyboardEvent) => {
+    if ((e.target as HTMLElement)?.closest?.('input, textarea')) return;
+    const map: Record<string, InputCmd> = {
+      ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right',
+      Enter: 'confirm', ' ': 'confirm', q: 'win', w: 'riichi', e: 'pon', r: 'chi', f: 'kan',
+      s: 'cancel', Escape: 'cancel', Tab: 'viewer',
+    };
+    const cmd = map[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (!cmd) return;
+    e.preventDefault();
+    this.input(cmd);
+  };
+
+  private pollPad = () => {
+    this.padHandle = requestAnimationFrame(this.pollPad);
+    const pads = navigator.getGamepads?.() ?? [];
+    const pad = [...pads].find((p) => p && p.connected);
+    if (!pad) return;
+    const pressed = pad.buttons.map((b) => b.pressed);
+    const edge = (i: number) => pressed[i] && !this.padPrev[i];
+    const cmds: [number, InputCmd][] = [
+      [14, 'left'], [15, 'right'], [0, 'confirm'], [1, 'cancel'], [2, 'win'], [3, 'riichi'],
+      [4, 'pon'], [5, 'chi'], [6, 'kan'], [7, 'kan'], [8, 'viewer'],
+    ];
+    for (const [i, c] of cmds) if (edge(i)) this.input(c);
+    // 左スティックは押しっぱなしで連続移動
+    const x = pad.axes[0] ?? 0;
+    const now = performance.now();
+    if (Math.abs(x) > 0.6 && now - this.padAxisAt > 180) {
+      this.padAxisAt = now;
+      this.input(x < 0 ? 'left' : 'right');
+    }
+    this.padPrev = pressed;
+  };
+
+  /** キー・パッドの操作を画面のボタン操作に置き換える */
+  input(cmd: InputCmd) {
+    const v = this.view;
+    if (!v) return;
+    if (cmd === 'viewer') { this.toggleViewer(); return; }
+    if (this.viewerOpen && (cmd === 'cancel' || cmd === 'confirm')) { this.toggleViewer(false); return; }
+    const click = (sel: string) => {
+      const el = this.stage.querySelector(sel) as HTMLElement | null;
+      if (el) { el.click(); return true; }
+      return false;
+    };
+    // 結果画面・終局画面
+    if (cmd === 'confirm' && (click('[data-act="ready"]') || (v.phase === 'gameEnd' && click('.final [data-exit]')))) return;
+    switch (cmd) {
+      case 'win': click('[data-act="ron"]') || click('[data-act="tsumo"]'); return;
+      case 'riichi': click('[data-act="riichi"]'); return;
+      case 'pon': click('[data-act="pon"]'); return;
+      case 'chi': click('[data-act="chi"]'); return;
+      case 'kan': click('[data-act="kan"]') || click('[data-act="nuki"]'); return;
+      case 'cancel': click('[data-act="cancel"]') || click('[data-act="pass"]'); return;
+    }
+    // 牌の選択と打牌
+    const tiles = [...this.stage.querySelectorAll<HTMLElement>('.myhand [data-tile]')];
+    const playable = tiles.filter((t) => t.classList.contains('playable'));
+    if (cmd === 'left' || cmd === 'right') {
+      const list = playable.length ? playable : tiles;
+      if (!list.length) return;
+      const idx = list.findIndex((t) => Number(t.dataset.tile) === this.selected);
+      const next = idx < 0 ? (cmd === 'left' ? list.length - 1 : list.length - 1) : (idx + (cmd === 'left' ? -1 : 1) + list.length) % list.length;
+      this.selected = Number(list[next].dataset.tile);
+      this.hoverTile = this.selected;
+      this.render(v);
+      return;
+    }
+    if (cmd === 'confirm') {
+      // 選択肢（チー・カンの候補）が出ていれば先頭を選ぶ
+      if (click('.abtn.choice')) return;
+      const o = v.options;
+      if (!o?.discard || v.phase !== 'turn') return;
+      const allowed = this.mode === 'riichi' ? o.riichi ?? [] : o.discard;
+      const me = v.players[v.you];
+      const id = this.selected !== null && allowed.includes(this.selected)
+        ? this.selected
+        : me.drawn !== undefined && me.drawn !== null && allowed.includes(me.drawn) ? me.drawn : null;
+      if (id === null) return;
+      haptics.tap('light');
+      this.send({ type: 'discard', tile: id, riichi: this.mode === 'riichi' });
+      this.mode = 'normal';
+      this.selected = null;
+      this.hoverTile = null;
+    }
+  }
+
   private handleButton(btn: HTMLElement, o: Options, v: GameView) {
     const act = btn.dataset.act;
     if (btn.dataset.chi !== undefined) {
@@ -694,6 +838,34 @@ export class TableUI {
     }
   }
 }
+
+/** キーボード・ゲームパッドの操作 */
+export type InputCmd = 'left' | 'right' | 'confirm' | 'cancel' | 'win' | 'riichi' | 'pon' | 'chi' | 'kan' | 'viewer';
+
+/** キー割り当て（設定画面の操作説明にも使う） */
+export const KEY_HELP: [string, string][] = [
+  ['← → / A D', '打牌する牌を選ぶ'],
+  ['Enter / Space', '選んだ牌を切る・決定'],
+  ['Q', 'ロン / ツモ'],
+  ['W', 'リーチ'],
+  ['E', 'ポン'],
+  ['R', 'チー'],
+  ['F', 'カン・北抜き'],
+  ['S / Esc', 'スキップ・キャンセル'],
+  ['Tab', '手牌ビュー（相手の手牌を拡大）'],
+  ['F11', '全画面の切り替え（PC版）'],
+];
+
+export const PAD_HELP: [string, string][] = [
+  ['十字キー / 左スティック', '牌を選ぶ'],
+  ['A', '切る・決定'],
+  ['B', 'スキップ・キャンセル'],
+  ['X', 'ロン / ツモ'],
+  ['Y', 'リーチ'],
+  ['LB / RB', 'ポン / チー'],
+  ['LT・RT', 'カン・北抜き'],
+  ['View（Back）', '手牌ビュー'],
+];
 
 function sameOpts(a: Options | null, b: Options | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);

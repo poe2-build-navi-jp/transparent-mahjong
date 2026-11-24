@@ -11,13 +11,19 @@ const VOICE_FILES: Record<VoiceKind, string> = {
 interface AudioSettings {
   bgm: boolean;
   voice: boolean;
+  /** 音量（0〜1） */
+  bgmVol: number;
+  voiceVol: number;
+  seVol: number;
 }
+
+const DEFAULT_AUDIO: AudioSettings = { bgm: true, voice: true, bgmVol: 0.6, voiceVol: 0.8, seVol: 0.7 };
 
 function load(): AudioSettings {
   try {
-    return { bgm: true, voice: true, ...JSON.parse(localStorage.getItem('tmj-audio') ?? '{}') };
+    return { ...DEFAULT_AUDIO, ...JSON.parse(localStorage.getItem('tmj-audio') ?? '{}') };
   } catch {
-    return { bgm: true, voice: true };
+    return { ...DEFAULT_AUDIO };
   }
 }
 
@@ -69,7 +75,7 @@ class AudioManager {
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
     this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.value = 0.16;
+    this.bgmGain.gain.value = 0.27 * this.settings.bgmVol;
     // 残響代わりの軽いディレイ
     const delay = this.ctx.createDelay(1);
     delay.delayTime.value = STEP * 1.5;
@@ -95,7 +101,16 @@ class AudioManager {
     try { localStorage.setItem('tmj-audio', JSON.stringify(this.settings)); } catch { /* noop */ }
   }
 
-  toggle(key: keyof AudioSettings): boolean {
+  /** 音量の変更（0〜1） */
+  setVolume(key: 'bgmVol' | 'voiceVol' | 'seVol', v: number) {
+    this.settings[key] = Math.max(0, Math.min(1, v));
+    this.save();
+    if (key === 'bgmVol' && this.ctx) this.bgmGain.gain.value = 0.27 * this.settings.bgmVol;
+    if (key === 'voiceVol') this.voice('pon');
+    if (key === 'seVol') this.click();
+  }
+
+  toggle(key: 'bgm' | 'voice'): boolean {
     this.settings[key] = !this.settings[key];
     this.save();
     if (key === 'bgm') {
@@ -112,7 +127,7 @@ class AudioManager {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const g = this.ctx.createGain();
-    g.gain.value = 1.0;
+    g.gain.value = 1.25 * this.settings.voiceVol;
     src.connect(g).connect(this.master);
     src.start();
   }
@@ -133,7 +148,7 @@ class AudioManager {
     bp.frequency.value = 1900;
     bp.Q.value = 1.2;
     const g = ctx.createGain();
-    g.gain.value = 0.5;
+    g.gain.value = 0.7 * this.settings.seVol;
     src.connect(bp).connect(g).connect(this.master);
     src.start(t);
     const o = ctx.createOscillator();
@@ -141,7 +156,7 @@ class AudioManager {
     o.frequency.setValueAtTime(320, t);
     o.frequency.exponentialRampToValueAtTime(140, t + 0.06);
     const og = ctx.createGain();
-    og.gain.setValueAtTime(0.25, t);
+    og.gain.setValueAtTime(0.35 * this.settings.seVol, t);
     og.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
     o.connect(og).connect(this.master);
     o.start(t);

@@ -33,7 +33,14 @@ export interface Env {
   REVENUECAT_API_KEY?: string;
   /** プレミアムの entitlement ID（RevenueCat で作ったもの） */
   PREMIUM_ENTITLEMENT?: string;
+  /** Steam 版: Steamworks のパブリッシャー Web API キー（wrangler secret で設定） */
+  STEAM_WEB_API_KEY?: string;
+  /** Steam 版: アプリ ID */
+  STEAM_APP_ID?: string;
 }
+
+/** Steam の認証チケットに付ける識別子（PC版の desktop/main.cjs と同じ文字列） */
+const STEAM_IDENTITY = 'transparent-mahjong';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CPU_NAMES = ['CPU 白鷺', 'CPU 烏', 'CPU 鷹'];
@@ -96,6 +103,16 @@ export default {
       const res = await quotaStub(env).fetch('https://quota/status', { method: 'POST', body: JSON.stringify({ tokens: [token] }) });
       const data = (await res.json()) as { status: QuotaStatus[] };
       return Response.json(data.status[0], { headers });
+    }
+
+    // Steam 版: 購入者であることを Steam で確認し、この端末をオンライン無制限にする
+    if (url.pathname === '/api/steam-auth' && req.method === 'POST') {
+      const body = (await req.json().catch(() => ({}))) as { token?: string; ticket?: string };
+      if (!TOKEN_RE.test(body.token ?? '') || !/^[0-9a-fA-F]{16,4096}$/.test(body.ticket ?? '')) {
+        return Response.json({ ok: false, error: 'bad request' }, { status: 400, headers });
+      }
+      const res = await quotaStub(env).fetch('https://quota/steam', { method: 'POST', body: JSON.stringify(body) });
+      return new Response(res.body, { status: res.status, headers: { ...headers, 'Content-Type': 'application/json' } });
     }
 
     // ルーム作成: 空いているコードを確保して返す
@@ -476,8 +493,36 @@ export class Quota implements DurableObject {
     return this.env.REVENUECAT_API_KEY ? this.plannedLimit : 0;
   }
 
+  /** Steam で購入を確認できた端末か（確認から30日有効） */
+  private async isSteamOwner(token: string): Promise<boolean> {
+    const s = await this.state.storage.get<{ owner: boolean; at: number }>(`s:${token}`);
+    return !!s?.owner && Date.now() - s.at < 30 * 24 * 3600 * 1000;
+  }
+
+  /** Steam の認証チケットを検証し、そのアカウントが購入済みか確かめる */
+  private async verifySteam(token: string, ticket: string): Promise<{ ok: boolean; error?: string }> {
+    const key = this.env.STEAM_WEB_API_KEY;
+    const appid = this.env.STEAM_APP_ID;
+    if (!key || !appid) return { ok: false, error: 'steam not configured' };
+    const base = 'https://partner.steam-api.com';
+    try {
+      const a = await fetch(`${base}/ISteamUserAuth/AuthenticateUserTicket/v1/?key=${encodeURIComponent(key)}&appid=${encodeURIComponent(appid)}&ticket=${ticket}&identity=${STEAM_IDENTITY}`);
+      const ab = (await a.json()) as { response?: { params?: { result?: string; steamid?: string; ownersteamid?: string } } };
+      const p = ab.response?.params;
+      if (p?.result !== 'OK' || !p.steamid) return { ok: false, error: 'ticket rejected' };
+      const o = await fetch(`${base}/ISteamUser/CheckAppOwnership/v4/?key=${encodeURIComponent(key)}&steamid=${p.steamid}&appid=${encodeURIComponent(appid)}`);
+      const ob = (await o.json()) as { appownership?: { ownsapp?: boolean } };
+      const owner = !!ob.appownership?.ownsapp;
+      await this.state.storage.put(`s:${token}`, { owner, at: Date.now() });
+      return { ok: owner, error: owner ? undefined : 'not owned' };
+    } catch {
+      return { ok: false, error: 'steam unavailable' };
+    }
+  }
+
   /** RevenueCat でプレミアム（サブスク有効）か確認。結果は10分キャッシュ */
   private async isPremium(token: string): Promise<boolean> {
+    if (await this.isSteamOwner(token)) return true;
     const key = this.env.REVENUECAT_API_KEY;
     if (!key) return false;
     const cached = await this.state.storage.get<{ v: boolean; at: number }>(`p:${token}`);
@@ -535,6 +580,12 @@ export class Quota implements DurableObject {
         if (olds.size) await this.state.storage.delete([...olds.keys()]);
       }
       return new Response(null, { status: n > max ? 429 : 200 });
+    }
+
+    if (url.pathname === '/steam') {
+      const { token, ticket } = (await req.json()) as { token: string; ticket: string };
+      const r = await this.verifySteam(token, ticket);
+      return Response.json(r, { status: r.ok ? 200 : 403 });
     }
 
     const { tokens } = (await req.json()) as { tokens: string[] };

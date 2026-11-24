@@ -2,6 +2,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_SERVER_URL?: string;
+  /** 'steam' = Steam 版（PC）としてビルド */
+  readonly VITE_PLATFORM?: string;
   readonly VITE_PEER_HOST?: string;
   readonly VITE_PEER_PORT?: string;
   readonly VITE_PEER_PATH?: string;

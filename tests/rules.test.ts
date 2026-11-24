@@ -53,7 +53,10 @@ describe('think time and bank', () => {
     );
     // 自分が親になるまで進める（席0が親でなければ CPU が進める）
     host.start();
-    for (let i = 0; i < 200 && !(host.game.phase === 'turn' && host.game.current === 0); i++) vi.advanceTimersByTime(300);
+    for (let i = 0; i < 200 && !(host.game.phase === 'turn' && host.game.current === 0); i++) {
+      if (host.game.optionsFor(0)?.pass) host.action(0, { type: 'pass' });
+      vi.advanceTimersByTime(300);
+    }
     expect(host.game.current).toBe(0);
     expect(last.bank).toBe(10000);
     expect(Math.round((last.deadline ?? 0) / 1000)).toBe(15);
@@ -63,7 +66,11 @@ describe('think time and bank', () => {
     const o = host.game.optionsFor(0)!;
     host.action(0, { type: 'discard', tile: o.discard![0] });
     expect(host.game.players[0].discards.length).toBe(discards + 1);
-    for (let i = 0; i < 400 && !(host.game.phase === 'turn' && host.game.current === 0); i++) vi.advanceTimersByTime(300);
+    for (let i = 0; i < 400 && !(host.game.phase === 'turn' && host.game.current === 0); i++) {
+      // 待っている間に回ってきた鳴き・ロンの判断はすぐスキップする（放置すると時間切れで持ち時間を使う）
+      if (host.game.optionsFor(0)?.pass) host.action(0, { type: 'pass' });
+      vi.advanceTimersByTime(300);
+    }
     if (host.game.phase === 'turn' && host.game.current === 0) {
       expect(last.bank).toBe(7000);
       // 何もしないと 5秒 + 7秒 で自動打牌

@@ -36,4 +36,7 @@ FREE_GAMES_PER_DAY = "1"
 ROOMS_PER_MINUTE = "5"
 # プレミアム判定に使う RevenueCat の entitlement ID
 PREMIUM_ENTITLEMENT = "premium"
+# Steam 版のアプリ ID（Steamworks で発行されたもの）。購入者の確認に使う
+STEAM_APP_ID = ""
+# Steamworks のパブリッシャー Web API キーは wrangler secret put STEAM_WEB_API_KEY で設定する
 # RevenueCat のシークレット API キーは wrangler secret put REVENUECAT_API_KEY で設定する（ここには書かない）
