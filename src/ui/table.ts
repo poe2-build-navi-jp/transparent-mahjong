@@ -81,6 +81,8 @@ export class TableUI {
   private renderPending = false;
   /** 手牌ビュー（相手の手牌の拡大表示）を開いているか */
   private viewerOpen = false;
+  /** 卓画面のメニュー（切り替えボタン一覧）を開いているか */
+  private menuOpen = false;
   /** 戦績・実績の記録係（対局ごとに main から渡される） */
   tracker: { observe(v: GameView): void } | null = null;
   private padHandle = 0;
@@ -248,7 +250,7 @@ export class TableUI {
   private layerHtml(v: GameView, p: PlayerView, prev: GameView | null): string {
     const r = this.rel(p.seat);
     const prevCount = prev?.players[p.seat].discards.length ?? 0;
-    // 河: 6枚×2段 + 3段目以降は横に伸ばす
+    // 河: 6枚×3行（19枚目以降は3行目を横に伸ばす）
     const rows: string[][] = [[], [], []];
     p.discards.forEach((d, i) => {
       const row = Math.min(2, Math.floor(i / 6));
@@ -265,7 +267,7 @@ export class TableUI {
       const melds = this.meldsHtml(p.melds, p.seat, 'opp', p.kita);
       if (r === 2) {
         // 対面は横に余裕があるので副露も同じ列に並べる
-        hand = `<div class="ohand ${p.melds.length + (p.kita.length ? 1 : 0) >= 2 ? 'many' : ''}" data-viewer="1">${tiles}${drawn}${melds}</div>`;
+        hand = `<div class="ohand ${(() => { const n = p.melds.length + (p.kita.length ? 1 : 0); return n >= 3 ? 'many' : n >= 1 ? 'some' : ''; })()}" data-viewer="1">${tiles}${drawn}${melds}</div>`;
       } else {
         // 左右は手牌の列を手牌だけにして牌を大きくし、副露は内側の列に置く
         hand = `<div class="ohand" data-viewer="1">${tiles}${drawn}</div>${melds ? `<div class="omelds">${melds}</div>` : ''}`;
@@ -331,8 +333,9 @@ export class TableUI {
     const s = this.settings;
     const tg = (key: keyof Settings, label: string) =>
       `<button class="toggle ${s[key] ? 'on' : ''}" data-toggle="${key}">${tr(label)}</button>`;
-    return `<div class="menu">
+    return `<div class="menu ${this.menuOpen ? 'open' : ''}">
       <button class="exit" data-exit="1">${tr('退出')}</button>
+      <button class="exit gear" data-menu="1" title="${tr('設定')}" aria-label="${tr('設定')}">⚙${this.menuOpen ? '▴' : '▾'}</button>
       <button class="exit viewbtn" data-viewer="1" title="${tr('Tabキーでも開けます')}">${tr('手牌ビュー')}</button>
       <div class="mlabel">${esc(this.label)}</div>
       <div class="toggles">${tg('autoWin', '自動和了')}${tg('noCalls', '鳴きなし')}${tg('autoDiscard', 'ツモ切り')}${tg('autoSort', '自動理牌')}
@@ -657,6 +660,7 @@ export class TableUI {
     if (this.suppressClick) { this.suppressClick = false; return; }
     const target = e.target as HTMLElement;
     const v = this.view;
+    if (target.closest('[data-menu]')) { this.menuOpen = !this.menuOpen; if (v) this.render(v); return; }
     if (target.closest('[data-viewer-close]')) { this.toggleViewer(false); return; }
     if (target.closest('[data-viewer]')) { this.toggleViewer(true); return; }
     if (target.closest('[data-exit]')) {
