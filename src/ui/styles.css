@@ -534,7 +534,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .layer.r2 .ohand { top: calc(var(--cy) + 269px); }
 /* 左右: 画面の端（手牌）とその内側（副露） */
 .layer.r1 .ohand, .layer.r3 .ohand { top: calc(var(--cy) + 562px); }
-.layer.r1 .omelds, .layer.r3 .omelds { top: calc(var(--cy) + 496px); }
+.layer.r1 .omelds, .layer.r3 .omelds { top: calc(var(--cy) + 490px); }
 .layer.r1 .ohand, .layer.r1 .omelds { transform: translateX(-10px); }
 .layer.r3 .ohand, .layer.r3 .omelds { transform: translateX(10px); }
 /* 副露は手牌の列の内側、画面の上下中央 */
@@ -565,3 +565,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .callout.c1 { left: 1060px; }
 .callout.c3 { left: 220px; }
 .callout.c2 { top: 150px; }
+
+/* ======================================================== 河を全員の正面にそろえる（v4）
+   6枚×3行の河を各自の正面の中央に置く。縦方向は狭いので、上下の河は中央に近く、
+   左右の河は少し離して、角で重ならないようにする。中央パネルは横長 */
+:root { --cy: 343px; }
+.pond { left: calc(640px - 132px); }
+.layer.r0 .pond, .layer.r2 .pond { top: calc(var(--cy) + 80px); }
+.layer.r1 .pond, .layer.r3 .pond { top: calc(var(--cy) + 132px); }
+.layer.r0 .rstick, .layer.r2 .rstick { top: calc(var(--cy) + 71px); }
+.layer.r1 .rstick, .layer.r3 .rstick { top: calc(var(--cy) + 124px); }
+.center { left: calc(640px - 120px); top: calc(var(--cy) - 66px); width: 240px; height: 132px; }
+.cseat { width: 120px; margin-left: -60px; gap: 6px; }
+.cseat.r0 { transform: translateY(50px); }
+.cseat.r1 { transform: rotate(-90deg) translateY(104px); }
+.cseat.r2 { transform: rotate(180deg) translateY(50px); }
+.cseat.r3 { transform: rotate(90deg) translateY(104px); }
+.timer { left: 236px; }
+.actions { max-width: 400px; }

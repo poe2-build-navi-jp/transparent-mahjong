@@ -250,7 +250,7 @@ export class TableUI {
   private layerHtml(v: GameView, p: PlayerView, prev: GameView | null): string {
     const r = this.rel(p.seat);
     const prevCount = prev?.players[p.seat].discards.length ?? 0;
-    // 河: 6枚×2段 + 3段目以降は横に伸ばす
+    // 河: 6枚×3行（19枚目以降は3行目を横に伸ばす）
     const rows: string[][] = [[], [], []];
     p.discards.forEach((d, i) => {
       const row = Math.min(2, Math.floor(i / 6));
