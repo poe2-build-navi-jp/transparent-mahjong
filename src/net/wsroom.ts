@@ -57,10 +57,24 @@ export async function fetchQuota(): Promise<QuotaStatus | null> {
   }
 }
 
+/** Steam 版: 購入者であることをサーバーに伝え、オンライン対戦を無制限にしてもらう */
+export async function registerSteam(ticket: string): Promise<boolean> {
+  if (!useServer) return false;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/steam-auth`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: myToken(), ticket }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function createRoomCode(): Promise<string> {
   const res = await fetch(`${SERVER_URL}/api/rooms`, { method: 'POST' });
   if (res.status === 429) throw new Error('ルームの作成が多すぎます。少し時間をおいてください');
-  if (!res.ok) throw new Error(`サーバーに接続できませんでした（${res.status}）`);
+  if (!res.ok) throw new Error('サーバーに接続できませんでした');
   const { code } = (await res.json()) as { code: string };
   return code;
 }

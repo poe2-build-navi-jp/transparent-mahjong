@@ -1,0 +1,18 @@
+API名,表示名（日本語）,説明（日本語）,Display name (English),Description (English),解除アイコン,未解除アイコン
+FIRST_GAME,はじめの一局,対局を最後まで打つ,First Game,Finish a game,assets/achievements/FIRST_GAME.jpg,assets/achievements/FIRST_GAME_locked.jpg
+FIRST_WIN,初和了,和了する,First Win,Win a hand,assets/achievements/FIRST_WIN.jpg,assets/achievements/FIRST_WIN_locked.jpg
+FIRST_TOP,初トップ,1位で対局を終える,First Place,Finish a game in 1st place,assets/achievements/FIRST_TOP.jpg,assets/achievements/FIRST_TOP_locked.jpg
+RIICHI_WIN,透けても立直,立直して和了する,Riichi in Plain Sight,Win a hand after declaring riichi,assets/achievements/RIICHI_WIN.jpg,assets/achievements/RIICHI_WIN_locked.jpg
+TSUMO_WIN,自摸の手応え,ツモで和了する,Self-Draw,Win by tsumo,assets/achievements/TSUMO_WIN.jpg,assets/achievements/TSUMO_WIN_locked.jpg
+MANGAN,満貫,満貫以上で和了する,Mangan,Win a hand worth mangan or more,assets/achievements/MANGAN.jpg,assets/achievements/MANGAN_locked.jpg
+HANEMAN,跳満,跳満以上で和了する,Haneman,Win a hand worth haneman or more,assets/achievements/HANEMAN.jpg,assets/achievements/HANEMAN_locked.jpg
+YAKUMAN,役満,役満で和了する,Yakuman,Win with a yakuman,assets/achievements/YAKUMAN.jpg,assets/achievements/YAKUMAN_locked.jpg
+OPAQUE_WAIT,見えない待ち,不透明牌で和了する（相手から見えない牌で待つ）,The Hidden Wait,Win on an opaque tile (a wait your rivals cannot see),assets/achievements/OPAQUE_WAIT.jpg,assets/achievements/OPAQUE_WAIT_locked.jpg
+ALL_CLEAR,丸見えの勝利,手牌がすべて透明牌の状態で和了する,Nothing to Hide,Win with a hand made entirely of transparent tiles,assets/achievements/ALL_CLEAR.jpg,assets/achievements/ALL_CLEAR_locked.jpg
+AKA_3,紅三点,赤ドラ3枚を使って和了する,Three Reds,Win using three red fives,assets/achievements/AKA_3.jpg,assets/achievements/AKA_3_locked.jpg
+NO_DEALIN,鉄壁,一度も放銃せずに対局を終える,Iron Wall,Finish a game without dealing in,assets/achievements/NO_DEALIN.jpg,assets/achievements/NO_DEALIN_locked.jpg
+SANMA,三人打ち,三人麻雀を最後まで打つ,Three at the Table,Finish a 3-player game,assets/achievements/SANMA.jpg,assets/achievements/SANMA_locked.jpg
+HANCHAN,半荘完走,半荘戦を最後まで打つ,The Long Game,Finish an East-South game,assets/achievements/HANCHAN.jpg,assets/achievements/HANCHAN_locked.jpg
+ONLINE,卓を囲む,オンライン対戦を最後まで打つ,Around the Table,Finish an online game,assets/achievements/ONLINE.jpg,assets/achievements/ONLINE_locked.jpg
+TOP_10,常勝,1位を10回とる,Unbeatable,Finish 1st ten times,assets/achievements/TOP_10.jpg,assets/achievements/TOP_10_locked.jpg
+GAMES_50,雀荘の常連,50回対局する,Regular,Play 50 games,assets/achievements/GAMES_50.jpg,assets/achievements/GAMES_50_locked.jpg

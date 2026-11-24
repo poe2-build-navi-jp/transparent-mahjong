@@ -54,14 +54,18 @@ export const AKA_IDS = [4 * 4 + 1, 13 * 4 + 1, 22 * 4 + 1];
 export const isAkaId = (id: number): boolean => AKA_IDS.includes(id);
 
 /** 一覧表示用の短い説明 */
-export function rulesSummary(r: Rules): string[] {
+export function rulesSummary(r: Rules, tr: (s: string, v?: Record<string, string | number>) => string = (s, v) => {
+  let x = s;
+  if (v) for (const [k, val] of Object.entries(v)) x = x.split(`{${k}}`).join(String(val));
+  return x;
+}): string[] {
   return [
-    r.count === 3 ? '三人麻雀' : '四人麻雀',
-    r.length === 'hanchan' ? '半荘戦' : '東風戦',
-    `${startScoreOf(r).toLocaleString()}点持ち`,
-    r.thinkSec ? `考慮${r.thinkSec}秒＋持ち時間${r.bankSec}秒` : '時間無制限',
-    r.aka ? '赤ドラあり' : '赤ドラなし',
-    r.kuitan ? '喰いタンあり' : '喰いタンなし',
-    r.tobi ? 'トビあり' : 'トビなし',
+    tr(r.count === 3 ? '三人麻雀' : '四人麻雀'),
+    tr(r.length === 'hanchan' ? '半荘戦' : '東風戦'),
+    tr('{n}点持ち', { n: startScoreOf(r).toLocaleString() }),
+    r.thinkSec ? tr('考慮{a}秒＋持ち時間{b}秒', { a: r.thinkSec, b: r.bankSec }) : tr('時間無制限'),
+    tr(r.aka ? '赤ドラあり' : '赤ドラなし'),
+    tr(r.kuitan ? '喰いタンあり' : '喰いタンなし'),
+    tr(r.tobi ? 'トビあり' : 'トビなし'),
   ];
 }

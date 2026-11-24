@@ -1,4 +1,5 @@
 import { rulesSummary, type Rules } from '../engine/rules';
+import { t } from '../i18n';
 
 type Opt = [unknown, string];
 interface Row {
@@ -27,16 +28,16 @@ export function rulesPanelHtml(r: Rules, timeNote = ''): string {
     const disabled = row.key === 'bankSec' && r.thinkSec === 0;
     const note = (row.key === 'thinkSec' || row.key === 'bankSec') && timeNote ? timeNote : row.note;
     return `<div class="rrow ${disabled ? 'disabled' : ''}">
-      <div class="rlabel">${row.label}${note ? `<small>${note}</small>` : ''}</div>
+      <div class="rlabel">${t(row.label)}${note ? `<small>${t(note)}</small>` : ''}</div>
       <div class="ropts">${row.opts.map(([v, label]) =>
-        `<button class="${r[row.key] === v ? 'on' : ''}" data-rule="${row.key}" data-val="${enc(v)}" ${disabled ? 'disabled' : ''}>${label}</button>`).join('')}</div>
+        `<button class="${r[row.key] === v ? 'on' : ''}" data-rule="${row.key}" data-val="${enc(v)}" ${disabled ? 'disabled' : ''}>${t(label)}</button>`).join('')}</div>
     </div>`;
   }).join('')}</div>`;
 }
 
 /** 参加者向けの読み取り専用表示 */
 export function rulesSummaryHtml(r: Rules): string {
-  return `<div class="rules-summary"><div class="rs-title">この卓のルール</div>${rulesSummary(r).map((s) => `<span>${s}</span>`).join('')}</div>`;
+  return `<div class="rules-summary"><div class="rs-title">${t('この卓のルール')}</div>${rulesSummary(r, t).map((s) => `<span>${s}</span>`).join('')}</div>`;
 }
 
 /** パネルのボタンに反応させる。変更後のルールを onChange に渡す */

@@ -1,0 +1,50 @@
+name: Build desktop (Steam)
+
+# PC版（Electron）を Windows / macOS / Linux 向けにビルドし、成果物（Steam にアップロードするフォルダ）を保存する。
+# Actions タブの「Run workflow」から手動で実行する。
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: '対戦サーバーの URL'
+        required: false
+        default: 'https://transparent-mahjong-web.alones-aqua.workers.dev'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            out: win-unpacked
+          - os: macos-latest
+            script: dist:mac
+            out: mac-universal
+          - os: ubuntu-latest
+            script: dist:linux
+            out: linux-unpacked
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - working-directory: desktop
+        run: npm ci
+      - working-directory: desktop
+        env:
+          TMJ_SERVER_URL: ${{ inputs.server_url }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TransparentMahjong-${{ matrix.out }}
+          path: desktop/release/${{ matrix.out }}
+          retention-days: 14

@@ -98,3 +98,11 @@ Cloudflare Workers + Durable Objects の対戦サーバー（サーバー権威�
 | M3 | TURN / 自前シグナリング導入、オンラインの安定化 |
 | M4 | Capacitor で iOS/Android ビルド、TestFlight・内部テスト |
 | M5 | ストア申請・正式リリース |
+
+## Steam 版（PC） ✅ 実装済み（公開作業はオーナー）
+
+- PC版アプリ（Electron、Windows / macOS / Linux）。GitHub Actions でビルド
+- Steamworks: 実績17件、Steam クラウド（戦績・実績）、購入確認（サーバーで Steam Web API）、オーバーレイ
+- 日本語・英語、キーボード・ゲームパッド操作、全画面、音量設定、チュートリアル、戦績・実績画面、手牌ビュー
+- ストア画像・スクリーンショット・説明文（日英）、SteamPipe 設定のひな形
+- 手順: `steam/README_JA.md`
