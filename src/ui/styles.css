@@ -521,3 +521,47 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .langsw button { border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 12px; }
 .langsw button.on { background: var(--gold); color: #2b1d05; }
 .logo-en { position: relative; z-index: 2; margin: -6px 0 6px; font-weight: 900; letter-spacing: .35em; font-size: clamp(12px, 2.4vw, 18px); color: #cfe; text-shadow: 0 0 12px rgba(140,220,255,.5); }
+
+/* ======================================================== 相手の牌を大きくするための配置（v3）
+   左右の相手の手牌を画面の端いっぱいの列に置き、自分の手牌はその間に並べる。
+   ドラ表示・メニュー・名前表示は空いた場所へ移す */
+:root { --cy: 345px; }
+.t-opp { --w: 45px; --h: 62px; }
+.layer.r2 .t-opp { --w: 50px; --h: 69px; }
+.layer.r2 .ohand.some .t-opp { --w: 47px; --h: 65px; }
+.layer.r2 .ohand.many .t-opp { --w: 41px; --h: 57px; }
+/* 対面: 画面の一番上 */
+.layer.r2 .ohand { top: calc(var(--cy) + 269px); }
+/* 左右: 画面の端（手牌）とその内側（副露） */
+.layer.r1 .ohand, .layer.r3 .ohand { top: calc(var(--cy) + 562px); }
+.layer.r1 .omelds, .layer.r3 .omelds { top: calc(var(--cy) + 496px); }
+.layer.r1 .ohand, .layer.r1 .omelds { transform: translateX(-10px); }
+.layer.r3 .ohand, .layer.r3 .omelds { transform: translateX(10px); }
+/* 副露は手牌の列の内側、画面の上下中央 */
+.layer.r1 .omelds, .layer.r3 .omelds { justify-content: center; }
+/* 自分の手牌と副露は左右の列の間 */
+.myhand { left: 90px; top: 610px; }
+.mymelds { right: 84px; top: 632px; }
+.actions { right: 92px; top: 530px; }
+.info { left: 92px; top: 480px; }
+.timer { left: 440px; top: 548px; }
+/* 名前表示 */
+.plate { min-width: 0; padding: 4px 12px 4px 4px; }
+.plate.p0 { left: 92px; top: 548px; right: auto; }
+.plate.p1 { left: 958px; top: 96px; right: auto; }
+.plate.p2 { left: 1030px; top: 4px; right: auto; }
+.plate.p3 { left: 150px; top: 150px; right: auto; }
+.plate .avatar { width: 32px; height: 32px; font-size: 15px; }
+.plate .pscore { font-size: 20px; }
+/* ドラ表示とメニューは左上 */
+.dora { left: 92px; top: 52px; }
+.menu { left: 92px; right: auto; top: 6px; flex-direction: row; align-items: flex-start; gap: 4px; }
+.menu .exit { padding: 6px 9px; font-size: 12px; }
+.menu .gear { font-size: 14px; padding: 4px 8px; }
+.menu .mlabel { display: none; }
+.menu .toggles { display: none; position: absolute; top: 40px; left: 0; width: 250px; padding: 8px; border-radius: 12px;
+  background: rgba(5,20,22,.98); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.5); grid-template-columns: 1fr 1fr; justify-content: stretch; }
+.menu.open .toggles { display: grid; }
+.callout.c1 { left: 1060px; }
+.callout.c3 { left: 220px; }
+.callout.c2 { top: 150px; }
