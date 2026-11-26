@@ -12,6 +12,19 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="manifest" href="manifest.webmanifest" />
+  <!-- Google tag (gtag.js) - loads only on the official Pages domain -->
+  <script>
+    if (location.hostname === 'toumei-mahjong.pages.dev') {
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=G-LJK6W86HZ4';
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-LJK6W86HZ4');
+    }
+  </script>
 </head>
 <body>
   <div id="app"></div>
