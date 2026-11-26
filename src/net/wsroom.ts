@@ -1,5 +1,6 @@
 import type { Action, GameView } from '../engine/game';
 import { DEFAULT_RULES, sanitizeRules, type Rules } from '../engine/rules';
+import { platform } from '../app/platform';
 import { myToken, type Member } from './online';
 
 /**
@@ -50,7 +51,7 @@ export interface QuotaStatus {
 export async function fetchQuota(): Promise<QuotaStatus | null> {
   if (!useServer) return null;
   try {
-    const res = await fetch(`${SERVER_URL}/api/quota?token=${encodeURIComponent(myToken())}`, { cache: 'no-store' });
+    const res = await fetch(`${SERVER_URL}/api/quota?token=${encodeURIComponent(myToken())}&client=${platform.kind}`, { cache: 'no-store' });
     return res.ok ? (await res.json()) as QuotaStatus : null;
   } catch {
     return null;
@@ -120,7 +121,7 @@ export class WsRoom {
     ws.onopen = () => {
       this.retries = 0;
       this.onConnection(true);
-      ws.send(JSON.stringify({ t: 'hello', name: this.name, token: myToken() }));
+      ws.send(JSON.stringify({ t: 'hello', name: this.name, token: myToken(), client: platform.kind }));
       if (this.ping) clearInterval(this.ping);
       // 回線の途中で切られないよう定期的に通信する
       this.ping = setInterval(() => this.send({ t: 'ping' }), 20000);
