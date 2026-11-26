@@ -4,7 +4,7 @@ import type { GameView } from './engine/game';
 import { GameHost } from './net/host';
 import { sanitizeName } from './net/names';
 import { normalizeCode, RoomClient, RoomHost, type Member } from './net/online';
-import { createRoomCode, detectServer, fetchQuota, registerSteam, useServer, WsRoom } from './net/wsroom';
+import { createRoomCode, detectServer, registerSteam, useServer, WsRoom } from './net/wsroom';
 import { DEFAULT_RULES, sanitizeRules, type Rules } from './engine/rules';
 import { ads } from './app/ads';
 import { platform } from './app/platform';
@@ -123,7 +123,6 @@ ${optionsHtml()}
         <button class="big" id="create">${t('ルームを作る')}</button>
         <button class="big" id="join">${t('コードで参加')}</button>
       </div>
-      <button class="quota-line" id="premium"><span id="quota">${t('オンライン対戦の残り回数を確認中…')}</span><span class="pm">${t('プレミアム')}</span></button>
       <div class="audio-row">
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
         <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">${t('音声')}</button>
@@ -159,88 +158,6 @@ ${optionsHtml()}
     setLang(b.dataset.lang === 'en' ? 'en' : 'ja');
     titleScreen();
   }));
-  document.getElementById('premium')!.addEventListener('click', () => premiumScreen());
-  void showQuota();
-}
-
-/** タイトル画面に本日の無料オンライン対局の残りを出す */
-async function showQuota() {
-  const el = document.getElementById('quota');
-  if (!el) return;
-  const q = await fetchQuota();
-  if (!document.body.contains(el)) return;
-  if (!q) { el.textContent = t('プレミアム会員について'); return; }
-  if (q.premium) el.textContent = t('プレミアム会員：オンライン対戦 無制限');
-  else if (q.remaining === null) el.textContent = platform.kind === 'web'
-    ? t('オンライン対戦：無制限で遊べます')
-    : t('オンライン対戦：アプリ公開まで無制限で遊べます');
-  else el.textContent = t('本日の無料オンライン対局：あと{n}回（毎日0時に回復）', { n: q.remaining });
-}
-
-// ---------------------------------------------------------------- プレミアム
-
-async function premiumScreen(back: () => void = () => titleScreen()) {
-  const q = await fetchQuota();
-  const ent = billing.entitlements;
-  const premium = q?.premium || ent.premium;
-  const limit = q?.plannedLimit ?? q?.limit ?? 1;
-  const unlimitedNow = !!q && q.limit === 0;
-  setScreen(`
-  <div class="screen rules">
-    <div class="card wide premium">
-      <h2>${t('プレミアム会員')}</h2>
-      <p>${t('PREMIUM_INTRO')}</p>
-      <div class="plans">
-        <div class="plan">
-          <div class="pname2">${t('無料')}</div>
-          <ul>
-            <li>${t('CPU対戦：無制限')}</li>
-            <li>${platform.kind !== 'web' && limit ? t('オンライン対戦：1日{n}回まで（日本時間0時に回復）', { n: limit }) : t('オンライン対戦：無制限')}</li>
-            <li>${t('対局後に広告あり（アプリ版）')}</li>
-          </ul>
-        </div>
-        <div class="plan pro">
-          <div class="pname2">${t('プレミアム')} <span id="price-premium">${t('月額800円')}</span></div>
-          <ul>
-            <li>${t('CPU対戦：無制限')}</li>
-            <li><b>${t('オンライン対戦：無制限')}</b></li>
-            <li><b>${t('広告なし')}</b></li>
-          </ul>
-        </div>
-      </div>
-      ${unlimitedNow && !premium ? `<div class="pm-on">${platform.kind === 'web' ? t('ウェブ版では、オンライン対戦も無制限で遊べます。') : t('アプリ公開までは、オンライン対戦も無制限で遊べます。')}</div>` : ''}
-      ${premium ? `<div class="pm-on">${t('プレミアム会員です。いつもありがとうございます！')}</div>` : ''}
-      ${import.meta.env.VITE_PLATFORM === 'steam'
-        ? `<div class="pm-on">${t('Steam版をご購入の方は、オンライン対戦が無制限・広告なしで遊べます（Steamにログインした状態で起動してください）。')}</div>`
-        : billing.available
-        ? `${premium ? '' : `<button class="big primary" id="buy-premium">${t('プレミアムに登録する')}</button>`}
-           ${ent.noAds || premium ? '' : `<button class="big" id="buy-noads">${t('広告だけ消す（買い切り）')}<span id="price-noads"></span></button>`}
-           <button class="link" id="restore">${t('購入を復元する')}</button>`
-        : `<div class="waiting">${t('ご購入はアプリ版から行えます（アプリ版は準備中です）。')}</div>`}
-      <p class="fine">${t('SUBSCRIPTION_TERMS')}</p>
-      <p class="fine"><a href="${t('terms.html')}">${t('利用規約')}</a> ・ <a href="${t('privacy.html')}">${t('プライバシーポリシー')}</a></p>
-      <div class="err" id="err"></div>
-      <button class="big" id="back">${t('戻る')}</button>
-    </div>
-  </div>`);
-  document.getElementById('back')!.addEventListener('click', back);
-  const err = (e: unknown) => { const el = document.getElementById('err'); if (el) el.textContent = (e as Error).message; };
-  document.getElementById('buy-premium')?.addEventListener('click', async () => {
-    try { await billing.buy('premium'); flash(t('プレミアムに登録しました')); void premiumScreen(back); } catch (e) { err(e); }
-  });
-  document.getElementById('buy-noads')?.addEventListener('click', async () => {
-    try { await billing.buy('noAds'); flash(t('広告を削除しました')); void premiumScreen(back); } catch (e) { err(e); }
-  });
-  document.getElementById('restore')?.addEventListener('click', async () => {
-    try { await billing.restore(); flash(t('購入を復元しました')); void premiumScreen(back); } catch (e) { err(e); }
-  });
-  if (billing.available) {
-    const p = await billing.prices();
-    const pp = document.getElementById('price-premium');
-    if (pp && p.premium) pp.textContent = t('月額{price}', { price: p.premium });
-    const pn = document.getElementById('price-noads');
-    if (pn && p.noAds) pn.textContent = `（${p.noAds}）`;
-  }
 }
 
 function ruleSettingsScreen() {
@@ -540,10 +457,6 @@ async function serverRoom(name: string, joinCode: string | null) {
     const el = document.getElementById('err');
     if (el) {
       el.textContent = errCode === 'quota-other' ? t('本日の無料オンライン対局を使い切った参加者がいます') : t(m);
-      if (errCode === 'quota') {
-        el.insertAdjacentHTML('beforeend', `<br><button class="link" id="to-premium">${t('プレミアム会員について')}</button>`);
-        document.getElementById('to-premium')?.addEventListener('click', () => { room.close(); activeRoom.set(null); void premiumScreen(); });
-      }
     } else flash(t(m));
   };
   room.onConnection = (ok) => { if (!ok) flash(t('通信が切れました。再接続しています…')); };
