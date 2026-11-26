@@ -9,6 +9,14 @@ export const LONG_JA: Record<string, string> = {
       <p>ただし無料枠には1日の上限があり、利用が増えて上限を超えると、その日はオンライン対戦ができなくなります（上限は翌日に回復します）。</p>
       <p>利用が増えた場合は、対戦を止めないために有料プランへ移行する必要があり、その場合は月額の維持費がかかります。</p>
       <p>長く遊べる場所を維持するため、よければサーバー維持費への支援をお願いします。</p>
+      <h3>支援のやり方</h3>
+      <ol>
+        <li>このページの下にある「Ko-fiで支援する」ボタンを押す（Ko-fiのページが開きます）</li>
+        <li>金額を決める（決まった金額はありません。少額からで大丈夫です）</li>
+        <li>名前とメッセージを書く（どちらも任意です。空欄のままでも支援できます）</li>
+        <li>PayPalで支払う</li>
+      </ol>
+      <p><b>Ko-fiのアカウント登録は不要です。</b>ゲストのまま、PayPalでそのまま支援できます。</p>
       <p><b>支援は任意です。支援してもしなくても、遊べる内容は一切変わりません。</b></p>`,
   SUBSCRIPTION_TERMS: `サブスクリプションは、期間終了の24時間前までに解約しない限り自動で更新されます。
       解約・更新の確認は App Store / Google Play のサブスクリプション設定から行えます。
@@ -77,6 +85,14 @@ export const LONG_EN: Record<string, string> = {
       <p>However, the free tier has a daily limit. If usage grows and exceeds that limit, online play will be unavailable for the rest of the day (the limit resets the next day).</p>
       <p>If usage grows further, the server will need to move to a paid plan to keep matches running, which will come with a monthly maintenance cost.</p>
       <p>To keep this a place everyone can enjoy for a long time, please consider supporting the server maintenance costs.</p>
+      <h3>How to support</h3>
+      <ol>
+        <li>Tap the "Support on Ko-fi" button at the bottom of this page (the Ko-fi page will open)</li>
+        <li>Choose an amount (there is no set amount — small amounts are very welcome)</li>
+        <li>Write your name and a message (both optional — you can leave them blank)</li>
+        <li>Pay with PayPal</li>
+      </ol>
+      <p><b>You don't need a Ko-fi account.</b> You can support as a guest, paying directly with PayPal.</p>
       <p><b>Support is entirely optional. Whether you support or not, nothing about the game you can play will change.</b></p>`,
   SUBSCRIPTION_TERMS: `The subscription renews automatically unless cancelled at least 24 hours before the end of the current period.
       You can manage or cancel it in the subscription settings of the App Store or Google Play.
