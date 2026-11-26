@@ -570,3 +570,30 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .cseat.r3 { transform: rotate(90deg) translateY(104px); }
 .timer { left: 236px; }
 .actions { max-width: 400px; }
+
+/* ======================================================== スマホでも見やすく（v5）
+   メニュー・名前と点数・鳴きボタン・発声を大きく。
+   メニューは左上に縦並び、ドラ表示は右上、名前表示は空いている場所へ */
+.menu { flex-direction: column; align-items: stretch; gap: 6px; top: 6px; left: 92px; }
+.menu .exit { padding: 9px 16px; font-size: 17px; font-weight: 700; border-radius: 20px; text-align: center; }
+.menu .gear { font-size: 22px; padding: 4px 14px; }
+.menu .toggles { top: 0; left: calc(100% + 8px); width: 330px; gap: 7px; padding: 10px; }
+.menu .toggle { padding: 10px 10px; font-size: 15px; }
+.dora { left: auto; right: 84px; top: 6px; }
+.plate { gap: 10px; padding: 6px 16px 6px 6px; }
+.plate .avatar { width: 46px; height: 46px; font-size: 22px; }
+.plate .pname { font-size: 16px; max-width: 170px; }
+.plate .pscore { font-size: 30px; }
+.plate .badge { font-size: 11px; }
+.plate.p0 { left: 92px; top: 538px; }
+.plate.p1 { left: auto; right: 84px; top: 146px; }
+.plate.p2 { left: 748px; top: 84px; }
+.plate.p3 { left: 160px; top: 154px; }
+.info { top: 466px; }
+.timer { left: 330px; top: 540px; }
+.abtn { min-width: 140px; padding: 15px 28px; font-size: 30px; border-radius: 40px; }
+.abtn.gray { font-size: 24px; }
+.abtn.choice { padding: 10px 16px; font-size: 20px; }
+.actions { top: 516px; max-width: 470px; gap: 12px; }
+.callout { font-size: 108px; }
+.callout.k-ron, .callout.k-tsumo { font-size: 150px; }
