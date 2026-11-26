@@ -52,6 +52,8 @@ export const EN: Record<string, string> = {
   'プレミアム会員について': 'About Premium',
   'プレミアム会員：オンライン対戦 無制限': 'Premium: unlimited online play',
   'オンライン対戦：アプリ公開まで無制限で遊べます': 'Online play: unlimited until the app launches',
+  'オンライン対戦：無制限で遊べます': 'Online play: unlimited',
+  'ウェブ版では、オンライン対戦も無制限で遊べます。': 'Online play is also unlimited on the web version.',
   '本日の無料オンライン対局：あと{n}回（毎日0時に回復）': 'Free online games today: {n} left (resets daily at 0:00 JST)',
   'プレミアム会員': 'Premium membership',
   '無料': 'Free',
