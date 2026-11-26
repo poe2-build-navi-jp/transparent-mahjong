@@ -29,10 +29,29 @@ function bridge(): DesktopBridge | null {
   return (window as unknown as { tmjDesktop?: DesktopBridge }).tmjDesktop ?? null;
 }
 
+/** 実行環境の種別（対戦サーバーへ伝えて無料枠の扱いを決める） */
+export type ClientKind = 'web' | 'app' | 'desktop';
+
+/** スマホアプリ（Capacitor）の中で動いているか */
+function isNativeApp(): boolean {
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  try { return !!cap?.isNativePlatform?.(); } catch { return false; }
+}
+
 export const platform = {
   /** PC版（Electron）で動いているか */
   get isDesktop(): boolean {
     return bridge() !== null;
+  },
+
+  /**
+   * 実行環境の種別。
+   * ウェブ版は常時無制限で、1日1回の無料枠制限はアプリ版のみに適用する（サーバー側の判定に使う）。
+   */
+  get kind(): ClientKind {
+    if (bridge() !== null) return 'desktop';
+    if (isNativeApp()) return 'app';
+    return 'web';
   },
 
   /** Steam 版として動いているか（Steam クライアント接続済み） */
