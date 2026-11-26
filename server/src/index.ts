@@ -14,6 +14,7 @@
  *
  * 無料枠: 1日あたりのオンライン対局数（FREE_GAMES_PER_DAY）。プレミアム会員は無制限。
  * 購入できるようになる（REVENUECAT_API_KEY を登録する）までは無料枠を適用しない。
+ * ただしウェブ版は常時無制限で、無料枠の制限はアプリ版のみに適用する。
  */
 import type { Action, GameView } from '../../src/engine/game';
 import { DEFAULT_RULES, sanitizeRules, type Rules } from '../../src/engine/rules';
@@ -100,7 +101,11 @@ export default {
     if (url.pathname === '/api/quota' && req.method === 'GET') {
       const token = url.searchParams.get('token') ?? '';
       if (!TOKEN_RE.test(token)) return Response.json({ error: 'bad token' }, { status: 400, headers });
-      const res = await quotaStub(env).fetch('https://quota/status', { method: 'POST', body: JSON.stringify({ tokens: [token] }) });
+      // 実行環境の種別（web / app / desktop）も渡す。ウェブ版は常時無制限にするため
+      const client = url.searchParams.get('client') ?? '';
+      const body: { tokens: string[]; clients?: Record<string, string> } = { tokens: [token] };
+      if (client) body.clients = { [token]: client };
+      const res = await quotaStub(env).fetch('https://quota/status', { method: 'POST', body: JSON.stringify(body) });
       const data = (await res.json()) as { status: QuotaStatus[] };
       return Response.json(data.status[0], { headers });
     }
@@ -146,7 +151,7 @@ export default {
 // ---------------------------------------------------------------- ルーム
 
 type ClientMsg =
-  | { t: 'hello'; name: string; token: string }
+  | { t: 'hello'; name: string; token: string; client?: string }
   | { t: 'start'; rules?: Rules; length?: 'tonpu' | 'hanchan'; count?: 3 | 4 }
   | { t: 'rules'; rules: Rules }
   | { t: 'act'; a: Action }
@@ -156,6 +161,13 @@ interface Member {
   token: string;
   name: string;
   seat: number;
+  /** 実行環境の種別（web / app / desktop）。無料枠の判定に使う */
+  client: string;
+}
+
+/** hello で申告された種別を正規化する。申告がなければウェブ版として扱う */
+function clientKind(raw: unknown): string {
+  return raw === 'app' || raw === 'desktop' ? raw : 'web';
 }
 
 interface RoomData {
@@ -299,6 +311,7 @@ export class Room implements DurableObject {
       for (const old of this.sockets(token)) if (old !== ws) { try { old.close(4000, 'replaced'); } catch { /* noop */ } }
       const existing = d.members.find((m) => m.token === token);
       if (existing) {
+        existing.client = clientKind(msg.client);
         ws.serializeAttachment({ token } satisfies Attachment);
         if (this.host && existing.seat >= 0) {
           this.host.setLink(existing.seat, { send: (v: GameView) => this.sendToken(token, { t: 'view', v }) });
@@ -321,7 +334,7 @@ export class Room implements DurableObject {
         return;
       }
       ws.serializeAttachment({ token } satisfies Attachment);
-      d.members.push({ token, name, seat: -1 });
+      d.members.push({ token, name, seat: -1, client: clientKind(msg.client) });
       if (!d.hostToken) d.hostToken = token;
       this.lobby();
       await this.save();
@@ -353,7 +366,12 @@ export class Room implements DurableObject {
       let q: { ok: boolean; blocked: string[] };
       try {
         const res = await quotaStub(this.env).fetch('https://quota/use', {
-          method: 'POST', body: JSON.stringify({ tokens: d.members.map((m) => m.token) }),
+          method: 'POST',
+          body: JSON.stringify({
+            tokens: d.members.map((m) => m.token),
+            // 種別も渡す。ウェブ版は常時無制限で、制限はアプリ版のみ
+            clients: Object.fromEntries(d.members.map((m) => [m.token, m.client ?? 'web'])),
+          }),
         });
         q = (await res.json()) as { ok: boolean; blocked: string[] };
       } finally {
@@ -556,10 +574,11 @@ export class Quota implements DurableObject {
     await this.state.storage.put('day', today);
   }
 
-  private async status(token: string): Promise<QuotaStatus> {
+  private async status(token: string, client?: string): Promise<QuotaStatus> {
     const premium = await this.isPremium(token);
     const used = (await this.state.storage.get<number>(`u:${token}`)) ?? 0;
-    const limit = this.limit;
+    // ウェブ版は常時無制限。1日1回の制限はアプリ版のみに適用する
+    const limit = client === 'web' ? 0 : this.limit;
     return { premium, used, limit, plannedLimit: this.plannedLimit, remaining: premium || limit === 0 ? null : Math.max(0, limit - used) };
   }
 
@@ -588,15 +607,15 @@ export class Quota implements DurableObject {
       return Response.json(r, { status: r.ok ? 200 : 403 });
     }
 
-    const { tokens } = (await req.json()) as { tokens: string[] };
+    const { tokens, clients } = (await req.json()) as { tokens: string[]; clients?: Record<string, string> };
     const list = (tokens ?? []).filter((t) => TOKEN_RE.test(t)).slice(0, 4);
 
     if (url.pathname === '/status') {
-      return Response.json({ status: await Promise.all(list.map((t) => this.status(t))) });
+      return Response.json({ status: await Promise.all(list.map((t) => this.status(t, clients?.[t]))) });
     }
 
     if (url.pathname === '/use') {
-      const st = await Promise.all(list.map((t) => this.status(t)));
+      const st = await Promise.all(list.map((t) => this.status(t, clients?.[t])));
       const blocked = list.filter((_, i) => st[i].remaining === 0);
       if (blocked.length) return Response.json({ ok: false, blocked });
       for (let i = 0; i < list.length; i++) {
