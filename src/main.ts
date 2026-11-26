@@ -16,6 +16,9 @@ import { haptics } from './ui/haptics';
 import { KEY_HELP, PAD_HELP, TableUI, tileHtml } from './ui/table';
 import { getLang, setLang, suggestLang, t } from './i18n';
 
+/** 運営支援（Ko-fi）のリンク先。本番公開前に実際の Ko-fi ページのURLへ差し替える */
+const SUPPORT_KOFI_URL = 'https://ko-fi.com/toumeimahjong';
+
 const app = document.getElementById('app')!;
 
 type Length = 'tonpu' | 'hanchan';
@@ -123,6 +126,7 @@ ${optionsHtml()}
         <button class="big" id="create">${t('ルームを作る')}</button>
         <button class="big" id="join">${t('コードで参加')}</button>
       </div>
+      <button class="support-line" id="support"><span>${t('運営を支援')}</span><span class="sp-sub">${t('サーバー維持費へのご協力')}</span></button>
       <div class="audio-row">
         <button class="toggle ${audio.settings.bgm ? 'on' : ''}" data-audio="bgm">BGM</button>
         <button class="toggle ${audio.settings.voice ? 'on' : ''}" data-audio="voice">${t('音声')}</button>
@@ -153,11 +157,27 @@ ${optionsHtml()}
   document.getElementById('tutorial')!.addEventListener('click', () => tutorialScreen());
   document.getElementById('stats')!.addEventListener('click', statsScreen);
   document.getElementById('settings')!.addEventListener('click', settingsScreen);
+  document.getElementById('support')!.addEventListener('click', () => supportScreen());
   document.getElementById('quit')?.addEventListener('click', () => platform.quit());
   app.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((b) => b.addEventListener('click', () => {
     setLang(b.dataset.lang === 'en' ? 'en' : 'ja');
     titleScreen();
   }));
+}
+
+// ---------------------------------------------------------------- 運営の支援
+
+function supportScreen(back: () => void = () => titleScreen()) {
+  setScreen(`
+  <div class="screen rules">
+    <div class="card wide support">
+      <h2>${t('運営の支援について')}</h2>
+      ${t('SUPPORT_HTML')}
+      <a class="big primary kofi" href="${SUPPORT_KOFI_URL}" target="_blank" rel="noopener">${t('Ko-fiで支援する')}</a>
+      <button class="big" id="back">${t('戻る')}</button>
+    </div>
+  </div>`);
+  document.getElementById('back')!.addEventListener('click', back);
 }
 
 function ruleSettingsScreen() {
