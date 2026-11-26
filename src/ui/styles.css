@@ -597,3 +597,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .actions { top: 516px; max-width: 470px; gap: 12px; }
 .callout { font-size: 108px; }
 .callout.k-ron, .callout.k-tsumo { font-size: 150px; }
+
+/* 透明牌の萬子を見やすく: 文字に白いふちを付け、太く・濃くする。光の反射は文字にかからないよう弱める */
+.tile.clear.man .face { filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
+.tile.clear.man .face text {
+  stroke: #fff; stroke-width: 4px; stroke-linejoin: round; paint-order: stroke fill; font-weight: 900;
+}
+.tile.clear.man .face text[fill="#1b1b1f"] { fill: #000; }
+.tile.clear.man .face text[fill="#d0312d"] { fill: #c0101a; }
+.tile.clear.man::after { opacity: .35; }
