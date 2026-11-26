@@ -171,7 +171,9 @@ async function showQuota() {
   if (!document.body.contains(el)) return;
   if (!q) { el.textContent = t('プレミアム会員について'); return; }
   if (q.premium) el.textContent = t('プレミアム会員：オンライン対戦 無制限');
-  else if (q.remaining === null) el.textContent = t('オンライン対戦：アプリ公開まで無制限で遊べます');
+  else if (q.remaining === null) el.textContent = platform.kind === 'web'
+    ? t('オンライン対戦：無制限で遊べます')
+    : t('オンライン対戦：アプリ公開まで無制限で遊べます');
   else el.textContent = t('本日の無料オンライン対局：あと{n}回（毎日0時に回復）', { n: q.remaining });
 }
 
@@ -193,7 +195,7 @@ async function premiumScreen(back: () => void = () => titleScreen()) {
           <div class="pname2">${t('無料')}</div>
           <ul>
             <li>${t('CPU対戦：無制限')}</li>
-            <li>${limit ? t('オンライン対戦：1日{n}回まで（日本時間0時に回復）', { n: limit }) : t('オンライン対戦：無制限')}</li>
+            <li>${platform.kind !== 'web' && limit ? t('オンライン対戦：1日{n}回まで（日本時間0時に回復）', { n: limit }) : t('オンライン対戦：無制限')}</li>
             <li>${t('対局後に広告あり（アプリ版）')}</li>
           </ul>
         </div>
@@ -206,7 +208,7 @@ async function premiumScreen(back: () => void = () => titleScreen()) {
           </ul>
         </div>
       </div>
-      ${unlimitedNow && !premium ? `<div class="pm-on">${t('アプリ公開までは、オンライン対戦も無制限で遊べます。')}</div>` : ''}
+      ${unlimitedNow && !premium ? `<div class="pm-on">${platform.kind === 'web' ? t('ウェブ版では、オンライン対戦も無制限で遊べます。') : t('アプリ公開までは、オンライン対戦も無制限で遊べます。')}</div>` : ''}
       ${premium ? `<div class="pm-on">${t('プレミアム会員です。いつもありがとうございます！')}</div>` : ''}
       ${import.meta.env.VITE_PLATFORM === 'steam'
         ? `<div class="pm-on">${t('Steam版をご購入の方は、オンライン対戦が無制限・広告なしで遊べます（Steamにログインした状態で起動してください）。')}</div>`
