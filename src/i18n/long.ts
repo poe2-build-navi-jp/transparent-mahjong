@@ -4,6 +4,12 @@ export const LONG_JA: Record<string, string> = {
   PREMIUM_INTRO: `透明麻雀のオンライン対戦は、対局を進めるサーバーを運営者が費用を負担して動かしています。
       遊ぶ人が増えるほどサーバー代がかかるため、<b>利用者の増加に合わせてサーバーを拡大していきます</b>。
       その運営費として、プレミアム会員（月額800円）をご用意しました。`,
+  SUPPORT_HTML: `<p>透明麻雀は、個人が運営しているゲームです。</p>
+      <p>オンライン対戦のサーバーは Cloudflare の無料枠で動いていて、今のところサーバーの費用はかかっていません。</p>
+      <p>ただし無料枠には1日の上限があり、利用が増えて上限を超えると、その日はオンライン対戦ができなくなります（上限は翌日に回復します）。</p>
+      <p>利用が増えた場合は、対戦を止めないために有料プランへ移行する必要があり、その場合は月額の維持費がかかります。</p>
+      <p>長く遊べる場所を維持するため、よければサーバー維持費への支援をお願いします。</p>
+      <p><b>支援は任意です。支援してもしなくても、遊べる内容は一切変わりません。</b></p>`,
   SUBSCRIPTION_TERMS: `サブスクリプションは、期間終了の24時間前までに解約しない限り自動で更新されます。
       解約・更新の確認は App Store / Google Play のサブスクリプション設定から行えます。
       料金はご利用のストアのアカウントに請求されます。`,
@@ -66,6 +72,12 @@ export const LONG_EN: Record<string, string> = {
   PREMIUM_INTRO: `Online matches in Transparent Mahjong run on a game server paid for by the developer.
       The more people play, the more the servers cost, so <b>we will keep expanding the servers as the player base grows</b>.
       Premium membership (¥800 per month) helps cover those running costs.`,
+  SUPPORT_HTML: `<p>Transparent Mahjong is run by an individual.</p>
+      <p>The online match server runs on Cloudflare's free tier, so at the moment there are no server costs.</p>
+      <p>However, the free tier has a daily limit. If usage grows and exceeds that limit, online play will be unavailable for the rest of the day (the limit resets the next day).</p>
+      <p>If usage grows further, the server will need to move to a paid plan to keep matches running, which will come with a monthly maintenance cost.</p>
+      <p>To keep this a place everyone can enjoy for a long time, please consider supporting the server maintenance costs.</p>
+      <p><b>Support is entirely optional. Whether you support or not, nothing about the game you can play will change.</b></p>`,
   SUBSCRIPTION_TERMS: `The subscription renews automatically unless cancelled at least 24 hours before the end of the current period.
       You can manage or cancel it in the subscription settings of the App Store or Google Play.
       Payment is charged to your store account.`,

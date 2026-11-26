@@ -478,6 +478,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* 設定・戦績・チュートリアル */
 .title-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; }
+.support-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(233,196,106,.07); color: #dfe9e6; font-size: 12px; text-align: left; }
+.support-line .sp-sub { flex: none; color: var(--muted); font-size: 11px; }
+.support .kofi { display: block; text-align: center; text-decoration: none; }
 .slider { display: grid; grid-template-columns: 9em 1fr 2.5em; align-items: center; gap: 10px; font-size: 13px; color: #dfe9e6; }
 .slider input { width: 100%; accent-color: var(--gold); }
 .slider b { text-align: right; color: var(--gold); }
@@ -570,39 +573,3 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .cseat.r3 { transform: rotate(90deg) translateY(104px); }
 .timer { left: 236px; }
 .actions { max-width: 400px; }
-
-/* ======================================================== スマホでも見やすく（v5）
-   メニュー・名前と点数・鳴きボタン・発声を大きく。
-   メニューは左上に縦並び、ドラ表示は右上、名前表示は空いている場所へ */
-.menu { flex-direction: column; align-items: stretch; gap: 6px; top: 6px; left: 92px; }
-.menu .exit { padding: 9px 16px; font-size: 17px; font-weight: 700; border-radius: 20px; text-align: center; }
-.menu .gear { font-size: 22px; padding: 4px 14px; }
-.menu .toggles { top: 0; left: calc(100% + 8px); width: 330px; gap: 7px; padding: 10px; }
-.menu .toggle { padding: 10px 10px; font-size: 15px; }
-.dora { left: auto; right: 84px; top: 6px; }
-.plate { gap: 10px; padding: 6px 16px 6px 6px; }
-.plate .avatar { width: 46px; height: 46px; font-size: 22px; }
-.plate .pname { font-size: 16px; max-width: 170px; }
-.plate .pscore { font-size: 30px; }
-.plate .badge { font-size: 11px; }
-.plate.p0 { left: 92px; top: 538px; }
-.plate.p1 { left: auto; right: 84px; top: 146px; }
-.plate.p2 { left: 748px; top: 84px; }
-.plate.p3 { left: 160px; top: 154px; }
-.info { top: 466px; }
-.timer { left: 330px; top: 540px; }
-.abtn { min-width: 140px; padding: 15px 28px; font-size: 30px; border-radius: 40px; }
-.abtn.gray { font-size: 24px; }
-.abtn.choice { padding: 10px 16px; font-size: 20px; }
-.actions { top: 516px; max-width: 470px; gap: 12px; }
-.callout { font-size: 108px; }
-.callout.k-ron, .callout.k-tsumo { font-size: 150px; }
-
-/* 透明牌の萬子を見やすく: 文字に白いふちを付け、太く・濃くする。光の反射は文字にかからないよう弱める */
-.tile.clear.man .face { filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
-.tile.clear.man .face text {
-  stroke: #fff; stroke-width: 4px; stroke-linejoin: round; paint-order: stroke fill; font-weight: 900;
-}
-.tile.clear.man .face text[fill="#1b1b1f"] { fill: #000; }
-.tile.clear.man .face text[fill="#d0312d"] { fill: #c0101a; }
-.tile.clear.man::after { opacity: .35; }
