@@ -27,6 +27,7 @@ export function tileHtml(id: TileId | null, o: TileOpts): string {
   const cls = ['tile', `t-${o.size}`];
   if (id === null || id < 0) cls.push('back');
   else cls.push(isOpaque(id) ? 'opaque' : 'clear');
+  if (id !== null && id >= 0 && kindOf(id) < 9) cls.push('man');
   if (o.side) cls.push('side');
   if (o.cls) cls.push(o.cls);
   const red = akaOn && id !== null && isAkaId(id);
